@@ -1,0 +1,28 @@
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+
+# Local PR checkouts created at review time
+.tmp-clones/
+
+# Bare git mirrors kept between reviews (may contain authenticated remote URLs)
+.repo-mirrors/
+
+# Cursor IDE / hook state (local only)
+.cursor/
+
+# Editor noise
+.idea/
+.vscode/
+!.vscode/extensions.json
+
+# pnpm
+.pnpm-store/
+
+# Test / tooling artifacts
+coverage/
+*.tsbuildinfo

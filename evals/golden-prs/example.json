@@ -1,0 +1,23 @@
+{
+  "id": "sql-injection-handler",
+  "description": "High-severity security finding should be block-eligible with default gates",
+  "agentOutput": {
+    "verdict": "request_changes",
+    "summary": "Unsafe string concatenation in query builder.",
+    "issues": [
+      {
+        "path": "src/api/users.ts",
+        "line": 42,
+        "severity": "high",
+        "confidence": 0.92,
+        "risk": "high",
+        "body": "User input is interpolated into SQL without parameterization."
+      }
+    ]
+  },
+  "expected": {
+    "minIssues": 1,
+    "minBlockEligible": 1,
+    "mustIncludePaths": ["src/api/users.ts"]
+  }
+}

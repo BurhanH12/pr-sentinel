@@ -1,0 +1,31 @@
+{
+  "blockOnFailure": true,
+  "failureThreshold": "high",
+  "minConfidenceToBlock": 0.7,
+  "riskThreshold": "medium",
+  "pathRules": [
+    {
+      "patterns": ["apps/api/**"],
+      "rules": "NestJS API package rules…",
+      "focusAreas": ["security", "performance"],
+      "skillRefs": ["nestjs-best-practices", "security-best-practices"]
+    }
+  ],
+  "excludePatterns": [
+    "*.lock",
+    "pnpm-lock.yaml",
+    "package-lock.json",
+    "yarn.lock",
+    "dist/**",
+    "build/**",
+    "coverage/**",
+    "*.generated.*",
+    "*.min.js",
+    "*.min.css",
+    ".next/**",
+    "node_modules/**"
+  ],
+  "maxFilesPerRun": 40,
+  "focusAreas": ["security", "performance", "style", "tests"],
+  "rules": "Additional rules specific to this repo. Markdown bullet points work great here. Leave this field out to inherit the org-wide rules from cursor-config/review-rules.md."
+}

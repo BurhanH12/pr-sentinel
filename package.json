@@ -1,0 +1,40 @@
+{
+  "name": "cursor-pr-agent",
+  "version": "1.0.0",
+  "description": "Automated PR review agent powered by @cursor/sdk (local runtime + GitHub PAT)",
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "start:worker": "node dist/worker.js",
+    "eval:golden": "tsx src/eval/run-eval.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@cursor/sdk": "1.0.13",
+    "@octokit/rest": "^21.0.2",
+    "@octokit/webhooks": "^13.4.1",
+    "dotenv": "^16.4.5",
+    "express": "^5.0.1",
+    "ioredis": "^5.4.2",
+    "pino": "^9.5.0",
+    "pino-pretty": "^13.0.0",
+    "simple-git": "^3.27.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^4.1.7"
+  }
+}
