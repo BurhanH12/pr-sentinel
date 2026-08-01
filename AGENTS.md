@@ -105,6 +105,8 @@ agent-orchestrator/
 ├── AGENTS.md                              ← this file
 ├── README.md                              ← human onboarding doc
 ├── REQUIREMENT.md                         ← original prompt
+├── IMPROVEMENT-PLAN.md                    ← phased plan driving the current cleanup work
+├── AI-CODE-REVIEW-MARKET-2026.md          ← market research backing the improvement plan
 ├── package.json                           ← Node ≥24, pnpm ≥9
 ├── pnpm-lock.yaml                         ← committed lockfile
 ├── tsconfig.json                          ← strict, ES2024, NodeNext, noUncheckedIndexedAccess
@@ -120,10 +122,10 @@ agent-orchestrator/
 ├── skills/                                ← review skill files (copy from user-level ~/.agents/skills etc.)
 │   ├── README.md                          ← explains the five skills and how to sync them
 │   ├── code-review-and-quality/           ← five-axis review: correctness, readability, arch, security, perf
-│   ├── nestjs-best-practices/             ← 40 NestJS rules (arch, DI, security, perf, DB, API, etc.)
+│   ├── nestjs-best-practices/             ← NestJS review guidance (arch, DI, security, perf, DB, API, etc.)
 │   ├── security-best-practices/           ← security review + vulnerability report skill
 │   ├── next-best-practices/               ← Next.js 15+ (RSC, async params, file conventions, etc.)
-│   └── vercel-react-best-practices/       ← 70 React/Next.js perf rules (waterfalls, bundle, re-renders)
+│   └── vercel-react-best-practices/       ← React/Next.js perf review guidance (waterfalls, bundle, re-renders)
 │
 └── src/
     ├── index.ts                           ← process entrypoint (signals + listen + mirror eviction)
@@ -185,6 +187,8 @@ anything is wrong. See `.env.example` for inline documentation on every var.
 | `CONFIG_REPO_OWNER/NAME/REF`   |          | Optional central config repo (see §7)                                |
 | `CURSOR_MODEL`                 |          | Default `composer-2.5`. Discover with `Cursor.models.list()`         |
 | `CURSOR_THINKING`              |          | `low` \| `high`; only honored for composer-\* models                 |
+| `CURSOR_AGENT_MAX_RETRIES`     |          | Default `1`. Retries for retryable CursorAgentError (startup only)   |
+| `CURSOR_AGENT_RETRY_BASE_MS`   |          | Default `1000`. Base backoff between agent startup retries           |
 | `LOG_LEVEL`                    |          | `info` by default                                                    |
 | `MAX_CONCURRENT_REVIEWS`       |          | Default `2`. Total parallel agent runs across all repos              |
 | `MAX_ACTIVE_PER_REPO`          |          | Default `1`. Prevents one busy repo monopolising all workers         |
@@ -388,9 +392,10 @@ Smoke flow for local dev:
   an info log. Full support requires splitting base/head repo identity in
   `PullRequestContext`, cloning the fork's head repo, and posting the commit
   status on the fork's SHA rather than the base repo.
-- No adaptive rate-limit throttling: `RATE_LIMIT_THROTTLE_THRESHOLD` is
-  planned but not yet implemented. If GitHub rate limits are hit, individual
-  API calls will fail and the review will surface an error status.
+- No adaptive rate-limit throttling: there is no config knob to slow down
+  requests as the GitHub API rate limit is approached. If GitHub rate limits
+  are hit, individual API calls will fail and the review will surface an
+  error status.
 - Mirror cache integrity is not verified on disk — a partially-written mirror
   (e.g. from a killed process) may cause `ensureMirror` to skip the clone
   and use a broken state. Mitigation: delete `.repo-mirrors` manually to
