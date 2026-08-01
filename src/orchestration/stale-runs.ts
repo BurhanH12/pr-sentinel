@@ -1,6 +1,5 @@
 /**
  * Tracks whether a review run is still the latest for its PR.
- * In-memory implementation used by the default queue; Redis mode extends this later.
  */
 export interface RunFreshnessChecker {
   isCurrentRun(runKey: string): boolean;

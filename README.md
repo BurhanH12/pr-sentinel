@@ -25,14 +25,14 @@ Express webhook server  ◄── HMAC-verified with GITHUB_WEBHOOK_SECRET
     ├── Post "Queued for review" commit status immediately
     │
     ▼
-Review queue — memory (default) or Redis (`QUEUE_BACKEND`)
+In-memory review queue
     │
     ├── Per-repo FIFO lanes + round-robin dispatch
     ├── MAX_CONCURRENT_REVIEWS / MAX_ACTIVE_PER_REPO / MAX_QUEUED_REVIEWS
     └── Event-aware coalescing (dedupe / replace stale SHA)
     │
     ▼
-Review worker: orchestratePRReview(pr)   [same process or pnpm start:worker]
+orchestratePRReview(pr)
     │
     ├── Load layered config (ORG_DEFAULTS → cursor-config/ → central repo → per-repo)
     ├── Optional requirements context (linked issues / project items)
@@ -171,22 +171,17 @@ Required values:
 
 Optional overrides (see `.env.example` for the full list):
 `TARGET_BRANCHES`, `CURSOR_MODEL`, `CURSOR_THINKING`, `CLONE_BASE_DIR`,
-`CONFIG_REPO_OWNER/NAME/REF`, `LOG_LEVEL`, `QUEUE_BACKEND`, `REDIS_URL`.
+`CONFIG_REPO_OWNER/NAME/REF`, `LOG_LEVEL`.
 
 ### 4. Run the server
 
-The orchestrator has two queue modes (set in `.env`):
-
-| Mode                    | `QUEUE_BACKEND` | Processes                                          | Best for                     |
-| ----------------------- | --------------- | -------------------------------------------------- | ---------------------------- |
-| **In-memory** (default) | `memory`        | One — webhook + reviews in the same Node process   | Local dev, single instance   |
-| **Redis**               | `redis`         | Two — HTTP ingress enqueues; worker(s) run reviews | Production, horizontal scale |
+The orchestrator runs a single process: the webhook server and the
+in-memory review queue share it, so there is no separate worker process
+to run or scale.
 
 `PORT` defaults to `3000`. Health: `GET /health`. Metrics: `GET /metrics`.
 
-#### Local dev — in-memory queue (simplest)
-
-Use this unless you need a durable Redis queue. No worker process.
+#### Local dev
 
 **Terminal 1 — orchestrator (hot reload):**
 
@@ -212,64 +207,10 @@ smee -u https://smee.io/YOUR_CHANNEL_ID --target http://localhost:3000/webhook
 
 Open a PR against a watched branch (default `dev`) and watch logs in terminal 1.
 
-#### Local dev — Redis queue (webhook + worker)
-
-Reviews run in a **separate worker process**. The webhook server only enqueues jobs.
-
-1. Start Redis locally (example with Docker):
-
-```bash
-docker run --rm -p 6379:6379 redis:7-alpine
-```
-
-2. In `.env`:
-
-```bash
-QUEUE_BACKEND=redis
-REDIS_URL=redis://localhost:6379
-```
-
-3. **Terminal 1 — webhook / HTTP server:**
-
-```bash
-pnpm dev
-```
-
-4. **Terminal 2 — review worker** (must use `QUEUE_BACKEND=redis`; reads the same `.env`):
-
-```bash
-pnpm build && pnpm start:worker
-```
-
-For worker development without a full build:
-
-```bash
-npx tsx src/worker.ts
-```
-
-5. **Terminal 3 — Smee** (same as in-memory mode):
-
-```bash
-smee -u https://smee.io/YOUR_CHANNEL_ID --target http://localhost:3000/webhook
-```
-
-If `pnpm start:worker` exits with `Worker requires QUEUE_BACKEND=redis`, your `.env` still has `QUEUE_BACKEND=memory` or the worker was started without loading `.env`.
-
 #### Production
-
-**In-memory (single process):**
 
 ```bash
 pnpm build && pnpm start
-```
-
-**Redis (ingress + one or more workers):**
-
-```bash
-# .env: QUEUE_BACKEND=redis, REDIS_URL=redis://...
-pnpm build
-pnpm start          # webhook + enqueue only
-pnpm start:worker   # run on same host or scale workers horizontally
 ```
 
 ### 5. Configure the GitHub webhook
@@ -348,7 +289,7 @@ The server is a plain Node.js HTTP listener — deploy anywhere:
   Caddy with TLS.
 
 GitHub needs to reach `/webhook` publicly. See [§4 Run the server](#4-run-the-server)
-for memory vs Redis process layout. `GET /metrics` exposes queue depth and
+for the process layout. `GET /metrics` exposes queue depth and
 latency histograms as JSON.
 
 ---
@@ -361,7 +302,6 @@ See [`AGENTS.md`](./AGENTS.md) for conventions and SDK notes. Layout:
 agent-orchestrator/
 ├── src/
 │   ├── index.ts              HTTP entry (signals, mirror eviction, listen)
-│   ├── worker.ts             Redis queue consumer (`pnpm start:worker`)
 │   ├── server.ts             Express + webhook routing + fork guard
 │   ├── orchestrator.ts       per-PR pipeline
 │   ├── env.ts / types.ts     zod env + shared types
@@ -369,7 +309,7 @@ agent-orchestrator/
 │   ├── config/loader.ts      layered review rules
 │   ├── context/                optional requirements / issue context
 │   ├── github/                 PAT auth, clone, mirror cache, diff, comments, statuses
-│   ├── orchestration/          memory + Redis queues, coalescing, stale-run guard
+│   ├── orchestration/          in-memory queue, coalescing, stale-run guard
 │   ├── observability/          `/metrics` JSON
 │   └── __tests__/              vitest unit tests
 ├── cursor-config/            org-wide review rules + JSON schema example
@@ -408,8 +348,5 @@ Runtime directories (gitignored): `.tmp-clones/` (ephemeral PR checkouts),
   single comment is outside the PR diff hunks. The orchestrator falls back
   to per-comment posting and drops the ones GitHub refuses; see logs at
   `level=info` with message `Per-comment fallback complete`.
-- **`Worker requires QUEUE_BACKEND=redis`** → set `QUEUE_BACKEND=redis` and
-  `REDIS_URL` in `.env`, ensure Redis is running, then start `pnpm start:worker`
-  (after `pnpm build`) or `npx tsx src/worker.ts`.
 - **Smee 404 on webhook** → `--target` must be `http://localhost:3000/webhook`,
   not `http://localhost:3000/`.

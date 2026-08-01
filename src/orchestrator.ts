@@ -13,8 +13,6 @@ import { loadReviewConfig } from "./config/loader.js";
 import { fetchRequirementContext } from "./context/requirements.js";
 import { runPRReview } from "./agent/runner.js";
 import { buildRunKey, getRunFreshnessChecker } from "./orchestration/queue.js";
-import { env } from "./env.js";
-import { isRunSupersededInRedis } from "./orchestration/redis-freshness.js";
 import { logger } from "./utils/logger.js";
 import { metrics } from "./observability/metrics.js";
 
@@ -42,12 +40,8 @@ export async function orchestratePRReview(
 ): Promise<void> {
   const runKey = buildRunKey(pr);
 
-  const isStale = async (): Promise<boolean> => {
-    if (env.QUEUE_BACKEND === "redis") {
-      return await isRunSupersededInRedis(runKey);
-    }
-    return !freshnessChecker.isCurrentRun(runKey);
-  };
+  const isStale = async (): Promise<boolean> =>
+    !freshnessChecker.isCurrentRun(runKey);
   const log = logger.child({
     repo: pr.repoFullName,
     pr: pr.prNumber,

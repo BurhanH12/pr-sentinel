@@ -275,12 +275,6 @@ export async function enqueueReview(
   pr: PullRequestContext,
   triggerAction: TriggerAction
 ): Promise<void> {
-  const { env } = await import("../env.js");
-  if (env.QUEUE_BACKEND === "redis") {
-    const { enqueueReviewRedis } = await import("./redis-queue.js");
-    return enqueueReviewRedis(pr, triggerAction);
-  }
-
   const prKey = buildPrKey(pr);
   const outcome = reviewQueue.enqueue(pr, triggerAction);
   metrics.increment(`enqueue_${outcome}`);

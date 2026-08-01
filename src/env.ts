@@ -81,15 +81,6 @@ const envSchema = z.object({
    */
   REPO_MIRROR_CACHE_DIR: z.string().default(".repo-mirrors"),
   REPO_MIRROR_TTL_MS: z.coerce.number().int().nonnegative().default(86_400_000),
-
-  /*
-   * Queue backend: memory (single process) or redis (durable + workers).
-   */
-  QUEUE_BACKEND: z.enum(["memory", "redis"]).default("memory"),
-  REDIS_URL: z.string().optional(),
-  WORKER_ID: z.string().default("worker-1"),
-  REVIEW_JOB_LEASE_MS: z.coerce.number().int().positive().default(3_600_000),
-  REVIEW_WORKER_POLL_MS: z.coerce.number().int().positive().default(1000),
 });
 
 export type Env = z.infer<typeof envSchema>;
