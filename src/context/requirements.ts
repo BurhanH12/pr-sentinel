@@ -32,8 +32,7 @@ export async function fetchRequirementContext(
 
   if (issueNumbers.size === 0) {
     return {
-      promptSection:
-        "\n> **Product context:** No linked ticket or issue was found in the PR title/body. Call out when missing context limits review confidence.\n",
+      promptSection: "",
       linkedIssueNumbers: [],
     };
   }

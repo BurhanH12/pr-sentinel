@@ -34,12 +34,12 @@ describe("fetchRequirementContext", () => {
     expect(ctx.promptSection).toContain("PKCE");
   });
 
-  it("returns product context note when no links found", async () => {
+  it("injects nothing into the prompt when no ticket is linked", async () => {
     const ctx = await fetchRequirementContext(
       { issues: { get: vi.fn() } } as never,
       { ...pr, prBody: "No ticket here" }
     );
     expect(ctx.linkedIssueNumbers).toEqual([]);
-    expect(ctx.promptSection).toContain("No linked ticket");
+    expect(ctx.promptSection).toBe("");
   });
 });
