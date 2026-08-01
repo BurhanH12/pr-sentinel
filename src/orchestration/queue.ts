@@ -13,6 +13,14 @@ import { metrics } from "../observability/metrics.js";
 export { buildPrKey, buildRunKey } from "./queue-keys.js";
 import { buildPrKey, buildRunKey } from "./queue-keys.js";
 
+export type EnqueueOutcome = "accepted" | "dedupe" | "replaced" | "overflow";
+
+export interface QueueStats {
+  totalQueued: number;
+  totalRunning: number;
+  activeRepos: number;
+}
+
 /*
  * In-memory multi-repo review queue.
  *
@@ -88,10 +96,7 @@ class ReviewQueue {
    *   "replaced"  — an older job for the same PR was replaced with this SHA
    *   "overflow"  — queue at capacity and no displaceable job found; rejected
    */
-  enqueue(
-    pr: PullRequestContext,
-    triggerAction: TriggerAction
-  ): "accepted" | "dedupe" | "replaced" | "overflow" {
+  enqueue(pr: PullRequestContext, triggerAction: TriggerAction): EnqueueOutcome {
     const prKey = buildPrKey(pr);
     const runKey = buildRunKey(pr);
     const repoKey = `${pr.owner}/${pr.repo}`;
@@ -244,7 +249,7 @@ class ReviewQueue {
     return this.freshness;
   }
 
-  stats(): { totalQueued: number; totalRunning: number; activeRepos: number } {
+  stats(): QueueStats {
     return {
       totalQueued: this.totalQueued(),
       totalRunning: this.totalRunning,
