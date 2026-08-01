@@ -609,9 +609,12 @@ Complementary positioning helps here too, per §4.6: running alongside an incumb
 
 ## 6. The plan
 
-### Phase 0 - strip and correct
+### Phase 0 - strip and correct - COMPLETE (2026-08-01)
 
 All deletion, no risk.
+Shipped on branch `phase-0-strip-and-correct`.
+Verification after the phase: `pnpm typecheck` clean, `pnpm test` 45/45, `pnpm build` clean.
+The test count fell from 46 because `learning-events.test.ts` went with the subsystem it covered; no other test was removed.
 
 | Remove | Why |
 |---|---|
@@ -626,6 +629,25 @@ It is not multi-worker safe (§3.8), and per §5.7 the primary surface is now an
 The in-memory queue is genuinely well built and is the supported path.
 
 Rewrite `AGENTS.md` §1/§3/§4/§7/§8/§11 against the actual code (§3.6).
+
+**What actually shipped.**
+Every row of the table above landed, plus three items the whole-branch review surfaced.
+`src/orchestration/queue-types.ts` was deleted too - its `ReviewQueueBackend` interface was the broken abstraction §3.8 names, and it outlived the Redis backend that was its only reason to exist; `EnqueueOutcome` and `QueueStats` moved into `queue.ts`.
+Both dynamic imports §3.8 complains about are gone, at the old `queue.ts:278` and `server.ts:179`.
+`skills/security-best-practices/LICENSE.txt` was restored after the prune deleted it, since the skill it licenses is still redistributed.
+
+**Two findings carried into Phase 1.**
+
+*`skills/next-best-practices/SKILL.md` is now empty of content.*
+It was a pure table of contents pointing at the 15 files the prune removed, so after trimming the dangling pointers nothing substantive remains.
+It is still inlined into every review prompt by `runtime-knowledge.ts`, where it costs tokens for a directive with no rules behind it.
+Decide in Phase 1 whether to restore real content, drop the skill from `ReviewSkillRef`, or fold its scope into another skill.
+The other four skills retain their inline content.
+
+*`vitest` picks up compiled tests from `dist/`.*
+After `pnpm build`, `pnpm test` reports 90 tests instead of 45, because the compiled copies under `dist/` match the test glob.
+This silently doubles every count and would mask a deleted test.
+The fix is an exclude in the vitest config, and it belongs with Phase 1 item 7 since the eval work depends on trustworthy test counts.
 
 ### Phase 1 - trust, and the two gates
 
