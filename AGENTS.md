@@ -156,7 +156,6 @@ agent-orchestrator/
     ├── orchestration/
     │   ├── queue.ts                       ← per-repo lane queues, round-robin dispatch, coalescing, enqueueReview()
     │   ├── queue-keys.ts                  ← buildPrKey / buildRunKey helpers
-    │   ├── queue-types.ts                 ← ReviewQueueBackend interface + shared queue types
     │   └── stale-runs.ts                  ← in-memory run-freshness tracking (marks superseded runs)
     │
     ├── observability/
