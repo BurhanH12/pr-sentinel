@@ -90,13 +90,6 @@ const envSchema = z.object({
   WORKER_ID: z.string().default("worker-1"),
   REVIEW_JOB_LEASE_MS: z.coerce.number().int().positive().default(3_600_000),
   REVIEW_WORKER_POLL_MS: z.coerce.number().int().positive().default(1000),
-
-  /** Append-only JSONL learning events on merged PRs. */
-  REVIEW_LEARNING_ENABLED: z
-    .enum(["true", "false"])
-    .default("false")
-    .transform((v) => v === "true"),
-  REVIEW_LEARNING_PATH: z.string().default(".review-learning/events.jsonl"),
 });
 
 export type Env = z.infer<typeof envSchema>;

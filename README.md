@@ -371,8 +371,6 @@ agent-orchestrator/
 │   ├── github/                 PAT auth, clone, mirror cache, diff, comments, statuses
 │   ├── orchestration/          memory + Redis queues, coalescing, stale-run guard
 │   ├── observability/          `/metrics` JSON
-│   ├── learning/               review outcome events (extensible)
-│   ├── eval/                   golden-PR eval harness (`pnpm eval:golden`)
 │   └── __tests__/              vitest unit tests
 ├── cursor-config/            org-wide review rules + JSON schema example
 ├── skills/                   bundled review skills (see skills/README.md)

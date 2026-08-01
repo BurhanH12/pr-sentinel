@@ -157,31 +157,6 @@ export function createServer(): express.Application {
     });
   });
 
-  webhooks.on("pull_request", async ({ payload }) => {
-    if (payload.action !== "closed" || !payload.pull_request.merged) {
-      return;
-    }
-    const pr: PullRequestContext = {
-      owner: payload.repository.owner.login,
-      repo: payload.repository.name,
-      repoFullName: payload.repository.full_name,
-      prNumber: payload.number,
-      prTitle: payload.pull_request.title,
-      prBody: payload.pull_request.body ?? "",
-      baseBranch: payload.pull_request.base.ref.toLowerCase(),
-      headBranch: payload.pull_request.head.ref,
-      headSha:
-        payload.pull_request.merge_commit_sha ?? payload.pull_request.head.sha,
-      authorLogin: payload.pull_request.user?.login ?? "unknown",
-      cloneUrl: payload.repository.clone_url,
-      requestedReviewers: [],
-    };
-    const { recordMergeEvent } = await import("./learning/events.js");
-    await recordMergeEvent(pr, pr.headSha).catch((err: unknown) => {
-      logger.warn({ err }, "Failed to record merge learning event");
-    });
-  });
-
   webhooks.onError((error) => {
     logger.error(
       { error },
