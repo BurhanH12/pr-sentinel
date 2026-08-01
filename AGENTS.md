@@ -223,13 +223,13 @@ target repo's webhook UI (Settings → Webhooks → Add webhook), matching
 
 Resolved per PR by `src/config/loader.ts`. Later layers win, per-field:
 
-1. **`ORG_DEFAULTS`** — hard-coded in `loader.ts` (`focusAreas`,
+1. **`ORG_DEFAULTS`** - hard-coded in `loader.ts` (`focusAreas`,
    `failureThreshold: "high"`, `minConfidenceToBlock`, `riskThreshold`,
    `pathRules`, exclude globs for lockfiles / dist / etc.).
 2. **`cursor-config/review-rules.md`** — bundled with the orchestrator; only
    overrides the `rules` field. Focused on NestJS and Next.js projects.
    This markdown file and the skill files under `skills/` are injected into
-   the same review prompt — the file does not replace the skills, both are
+   the same review prompt - the file does not replace the skills, both are
    sent to the model together.
    See `skills/README.md` for how the two are kept in sync.
 3. **Central config repo** (if `CONFIG_REPO_OWNER/NAME` env set) — fetches
@@ -284,7 +284,7 @@ for a matching PR.
   A streaming run that watches per-turn `usage` and aborts when a budget is
   exceeded is the intended direction for the cost kill-switch (see
   IMPROVEMENT-PLAN.md §2.7).
-  That cost cap is **not implemented yet** — do not write documentation or
+  That cost cap is **not implemented yet** - do not write documentation or
   code comments that imply it is.
   When it is built, the constraint is on the implementation (it must observe
   and abort on per-turn usage), not on avoiding `run.stream()` itself.
@@ -370,7 +370,7 @@ Smoke flow for local dev:
   `CURSOR_AGENT_MAX_RETRIES` attempts (default 1) with a linear backoff of
   `CURSOR_AGENT_RETRY_BASE_MS` per attempt.
   Mid-run failures (`RunResult.status === "error"`) are still not retried.
-- No persistent queue — the review queue (`src/orchestration/queue.ts`) is
+- No persistent queue - the review queue (`src/orchestration/queue.ts`) is
   in-memory only and does not survive a process restart or crash.
   This used to be masked by an optional Redis-backed queue; that backend has
   been removed, so the in-memory queue is now the only path and this
@@ -378,7 +378,7 @@ Smoke flow for local dev:
   A crash mid-review re-runs only when GitHub redelivers (manual retry from
   the webhook UI, or push a new commit).
 - Metrics ARE exported as JSON: `GET /metrics` (`src/server.ts`) returns the
-  snapshot from `src/observability/metrics.ts` — counters, gauges, and
+  snapshot from `src/observability/metrics.ts` - counters, gauges, and
   latency histograms (queue wait, agent duration).
   There is no Prometheus or OTel exporter; a scraper has to poll the JSON
   endpoint itself.
