@@ -314,7 +314,6 @@ agent-orchestrator/
 │   └── __tests__/              vitest unit tests
 ├── cursor-config/            org-wide review rules + JSON schema example
 ├── skills/                   bundled review skills (see skills/README.md)
-├── evals/golden-prs/         example golden fixtures for eval harness
 ├── AGENTS.md                 agent / contributor source of truth
 └── .env.example              all env vars (never commit `.env`)
 ```

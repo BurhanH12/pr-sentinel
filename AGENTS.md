@@ -23,8 +23,9 @@ The orchestrator is a long-running **Express HTTP server** that:
    - **Inline line-level review comments** on the diff (posted as a single
      `event: "COMMENT"` review; falls back to per-comment posts if the bulk
      review is rejected).
-   - One **GitHub check run** named `Cursor PR Review` that can optionally
+   - One **GitHub commit status** named `Cursor PR Review` that can optionally
      **block merge** when the configured severity threshold is hit.
+     See §6 for why this is a commit status and not a check run.
 
 The whole stack is meant to drop into any GitHub repo the orchestrator's PAT
 has access to — no per-repo install step beyond pointing a webhook at this
@@ -38,7 +39,7 @@ The original requirement (`REQUIREMENT.md`) made these decisions explicit:
 | ----------------- | --------------------------------------------------------------- |
 | Deployment        | Express HTTP server (direct GitHub webhooks)                    |
 | Config location   | **Layered** — central defaults + per-repo overrides             |
-| GitHub outputs    | PR summary + inline comments + check run (all three)            |
+| GitHub outputs    | PR summary + inline comments + commit status (all three)        |
 | Triggering branch | PRs targeting `dev` (configurable via `TARGET_BRANCHES`)        |
 | Review baseline   | Against `dev` branch — agent must respect existing architecture |
 | Reviewer engine   | `@cursor/sdk` (no third-party PR review tool)                   |
@@ -48,7 +49,7 @@ Decisions taken in the current setup pass (see chat history):
 | Decision               | Choice                                                                                        |
 | ---------------------- | --------------------------------------------------------------------------------------------- |
 | Cursor SDK runtime     | **`local`** — orchestrator clones PR head SHA itself, agent runs against that checkout        |
-| Fan-out                | **Single combined agent** (one prompt, one check run, ~1/3 the cost vs. 3 parallel subagents) |
+| Fan-out                | **Single combined agent** (one prompt, one commit status, ~1/3 the cost vs. 3 parallel subagents) |
 | GitHub auth            | **Single fine-grained PAT** (no GitHub App)                                                   |
 | PAT identity           | Personal PAT (review comments author = PAT owner)                                             |
 | Repo scope             | Any repo the PAT can see (no allowlist)                                                       |
@@ -92,7 +93,7 @@ Decisions taken in the current setup pass (see chat history):
 │  5. Run single Cursor agent against local clone (agent/runner.ts)        │
 │  6. Upsert PR summary comment (github/comments.ts)                       │
 │  7. Post inline review comments (github/comments.ts)                     │
-│  8. Mark check completed: success | failure                              │
+│  8. Update commit status: success | failure                              │
 │  9. Always: cleanup the ephemeral checkout                               │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
@@ -132,10 +133,16 @@ agent-orchestrator/
     ├── types.ts                           ← shared TS types (PR context, review result, queue job)
     │
     ├── agent/
-    │   └── runner.ts                      ← @cursor/sdk Agent.prompt + zod-validated JSON
+    │   ├── runner.ts                      ← builds the review prompt, invokes the agent, parses/gates the JSON result
+    │   ├── cursor-invoke.ts               ← @cursor/sdk Agent.prompt wrapper with retry on retryable CursorAgentError
+    │   ├── gating.ts                      ← severity/risk/confidence merge-gate computation (computeShouldFail)
+    │   └── runtime-knowledge.ts           ← detects target repo stack + injects AGENTS.md/CONTEXT.md and skill files
     │
     ├── config/
     │   └── loader.ts                      ← layered config: ORG_DEFAULTS → built-in MD → central repo → per-repo
+    │
+    ├── context/
+    │   └── requirements.ts                ← extracts linked-issue context from PR title/body for the prompt
     │
     ├── github/
     │   ├── auth.ts                        ← PAT-authed Octokit singleton + authenticated clone URL
@@ -143,13 +150,22 @@ agent-orchestrator/
     │   ├── repo-cache.ts                  ← bare git mirror cache + ephemeral checkout lifecycle
     │   ├── checks.ts                      ← queued / pending / update / fail / overflow commit status
     │   ├── comments.ts                    ← upsert summary comment + inline review (bulk → per-comment fallback)
-    │   └── diff.ts                        ← paginated file fetch + exclude-glob filter + prompt formatter
+    │   ├── diff.ts                        ← paginated file fetch + exclude-glob filter + prompt formatter
+    │   └── review-context.ts              ← fetches + classifies prior review comment threads (accepted / needs-human / needs-fix)
     │
     ├── orchestration/
-    │   └── queue.ts                       ← per-repo lane queues, round-robin dispatch, coalescing, enqueueReview()
+    │   ├── queue.ts                       ← per-repo lane queues, round-robin dispatch, coalescing, enqueueReview()
+    │   ├── queue-keys.ts                  ← buildPrKey / buildRunKey helpers
+    │   ├── queue-types.ts                 ← ReviewQueueBackend interface + shared queue types
+    │   └── stale-runs.ts                  ← in-memory run-freshness tracking (marks superseded runs)
     │
-    └── utils/
-        └── logger.ts                      ← pino logger (pino-pretty in dev)
+    ├── observability/
+    │   └── metrics.ts                     ← in-process counters/gauges/histograms, served as JSON at GET /metrics
+    │
+    ├── utils/
+    │   └── logger.ts                      ← pino logger (pino-pretty in dev)
+    │
+    └── __tests__/                         ← vitest unit tests (queue, gating, config, context, metrics, etc.)
 ```
 
 ## 5. Environment contract
@@ -207,13 +223,15 @@ target repo's webhook UI (Settings → Webhooks → Add webhook), matching
 
 Resolved per PR by `src/config/loader.ts`. Later layers win, per-field:
 
-1. **`ORG_DEFAULTS`** — hard-coded in `loader.ts` (`subagents → focusAreas`,
-   `failureThreshold: "high"`, exclude globs for lockfiles / dist / etc.).
+1. **`ORG_DEFAULTS`** — hard-coded in `loader.ts` (`focusAreas`,
+   `failureThreshold: "high"`, `minConfidenceToBlock`, `riskThreshold`,
+   `pathRules`, exclude globs for lockfiles / dist / etc.).
 2. **`cursor-config/review-rules.md`** — bundled with the orchestrator; only
    overrides the `rules` field. Focused on NestJS and Next.js projects.
-   Distilled from five review skills in `skills/` (code-review-and-quality,
-   nestjs-best-practices, security-best-practices, next-best-practices,
-   vercel-react-best-practices).
+   This markdown file and the skill files under `skills/` are injected into
+   the same review prompt — the file does not replace the skills, both are
+   sent to the model together.
+   See `skills/README.md` for how the two are kept in sync.
 3. **Central config repo** (if `CONFIG_REPO_OWNER/NAME` env set) — fetches
    `repos/{owner}/{repo}.json` from that repo at `CONFIG_REPO_REF`.
    Full `Partial<ReviewRulesConfig>`.
@@ -221,26 +239,55 @@ Resolved per PR by `src/config/loader.ts`. Later layers win, per-field:
    (full `Partial<ReviewRulesConfig>`) OR `.cursor/review-rules.md`
    (rules text only). JSON wins if both exist.
 
-`ReviewRulesConfig` shape (see `src/types.ts`):
+`ReviewRulesConfig` shape (see `src/types.ts`; defaults are the `ORG_DEFAULTS`
+object in `src/config/loader.ts`):
 
 ```ts
 interface ReviewRulesConfig {
-  rules: string; // markdown injected into the prompt
-  blockOnFailure: boolean; // true → check conclusion="failure" can block merge
-  failureThreshold: Severity; // critical | high | medium | low | info
-  excludePatterns: string[]; // glob patterns excluded from review
+  rules: string; // markdown injected into the prompt; default ""
+  blockOnFailure: boolean; // true → status state="failure" can block merge; default false
+  failureThreshold: Severity; // critical | high | medium | low | info; default "high"
+  minConfidenceToBlock: number; // 0-1, min per-issue confidence to count toward merge block; default 0.7
+  riskThreshold: Severity; // min per-issue risk to count toward merge block; default "medium"
+  excludePatterns: string[]; // glob patterns excluded from review (lockfiles, dist/**, etc.)
   maxFilesPerRun: number; // hard cap, default 40
-  focusAreas: string[]; // prompt-only knob; default [security, performance, style]
+  focusAreas: string[]; // prompt-only knob; default [correctness, security, architecture, performance, consistency]
+  pathRules: PathRulePack[]; // path-scoped rule packs for monorepos, matched against changed file paths
 }
 ```
 
+A finding only counts toward `blockOnFailure` when its severity, risk, and
+confidence all clear their respective thresholds (`src/agent/gating.ts`,
+`computeShouldFail`).
+Findings that clear the severity threshold alone are surfaced as advisory,
+not block-eligible.
+
+`ORG_DEFAULTS.pathRules` ships two packs out of the box: one for
+`apps/api/**` / `api/**` / `server/**` (backend focus areas, NestJS and
+security skills), and one for `apps/web/**` / `web/**` / `app/**` /
+`pages/**` (frontend focus areas, Next.js and React skills).
+Path rules add to, rather than replace, the base `focusAreas` and skill set
+for a matching PR.
+
 ## 8. Cursor SDK usage notes (important — easy to get wrong)
 
-- We use **`Agent.prompt(message, options)`** (one-shot create + send + wait
-  - dispose). Don't go back to `Agent.create + agent.send + run.stream(...)`
-    unless you need streaming events for UI — the previous code in
-    `runner.ts` had a broken stream parser (`event.type === "text"` is not a
-    real event type; assistant text lives in `assistant.message.content[].text`).
+- We currently use **`Agent.prompt(message, options)`** (one-shot create +
+  send + wait + dispose), invoked through the retry wrapper in
+  `src/agent/cursor-invoke.ts`.
+  An earlier version of this doc warned against `Agent.create + agent.send +
+  run.stream(...)` because an earlier implementation had a broken stream
+  parser (`event.type === "text"` is not a real event type; assistant text
+  lives in `assistant.message.content[].text`).
+  That warning is now outdated and must not guide new work.
+  `Agent.prompt` gives no mid-run control, so there is no way to bound the
+  cost of a single agent run once it starts.
+  A streaming run that watches per-turn `usage` and aborts when a budget is
+  exceeded is the intended direction for the cost kill-switch (see
+  IMPROVEMENT-PLAN.md §2.7).
+  That cost cap is **not implemented yet** — do not write documentation or
+  code comments that imply it is.
+  When it is built, the constraint is on the implementation (it must observe
+  and abort on per-turn usage), not on avoiding `run.stream()` itself.
 - Runtime is **`local: { cwd }`** where `cwd` is the path returned by
   `github/clone.ts`. The agent gets full read access to the working tree at
   the PR head SHA. This is **cheaper and faster than `cloud:`** and does
@@ -318,13 +365,23 @@ Smoke flow for local dev:
 
 ## 11. Known gaps / future work (none required by current spec)
 
-- No retry policy on transient `RateLimitError` from the Cursor SDK; one
-  retry with backoff would be a low-risk addition.
-- No persistent queue — the in-memory queue is lost on crash. A crash
-  mid-review re-runs only when GitHub redelivers (manual retry from webhook
-  UI, or push a new commit).
-- No metrics export (Prometheus / OTel). Logs are structured JSON via Pino
-  and can be scraped from stdout.
+- There is a retry policy for `Agent.prompt` startup failures: `src/agent/cursor-invoke.ts`
+  retries a `CursorAgentError` whose `isRetryable` flag is true, up to
+  `CURSOR_AGENT_MAX_RETRIES` attempts (default 1) with a linear backoff of
+  `CURSOR_AGENT_RETRY_BASE_MS` per attempt.
+  Mid-run failures (`RunResult.status === "error"`) are still not retried.
+- No persistent queue — the review queue (`src/orchestration/queue.ts`) is
+  in-memory only and does not survive a process restart or crash.
+  This used to be masked by an optional Redis-backed queue; that backend has
+  been removed, so the in-memory queue is now the only path and this
+  limitation is real again.
+  A crash mid-review re-runs only when GitHub redelivers (manual retry from
+  the webhook UI, or push a new commit).
+- Metrics ARE exported as JSON: `GET /metrics` (`src/server.ts`) returns the
+  snapshot from `src/observability/metrics.ts` — counters, gauges, and
+  latency histograms (queue wait, agent duration).
+  There is no Prometheus or OTel exporter; a scraper has to poll the JSON
+  endpoint itself.
 - No support for `/cursor review` slash command — only commit/PR events
   trigger reviews. Adding it would mean handling `issue_comment` events.
 - **Fork PR support is deferred (Phase 2)**: PRs where the contributor's
