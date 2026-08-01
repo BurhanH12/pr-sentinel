@@ -16,9 +16,10 @@ Each skill is maintained independently and covers a focused domain:
 
 ## Keeping rules in sync
 
-`cursor-config/review-rules.md` is a curated distillation of the rules above
-into a single injected prompt. When you update a skill file, review whether
-the corresponding section in `review-rules.md` also needs updating.
+`cursor-config/review-rules.md` is injected into the same review prompt
+alongside these skill files, not a replacement for them. When you update a
+skill file, review whether the corresponding section in `review-rules.md`
+also needs updating.
 
 ## Copying skill files here
 
