@@ -11,6 +11,8 @@
  * old per-focus subagent fan-out has been removed.
  */
 
+import type { TokenUsage } from "./observability/cost.js";
+
 export interface ReviewRulesConfig {
   /** Human-readable rules passed verbatim into the agent prompt. */
   rules: string;
@@ -198,6 +200,13 @@ export interface ReviewResult {
    * should block a merge, `errored` says the tool never got a real answer.
    */
   errored?: boolean;
+  /** Token usage and estimated cost for this run. Absent when the SDK reported no usage. */
+  runCost?: {
+    usage: TokenUsage;
+    estimatedCostUsd: number;
+    cacheHitRate: number;
+    durationMs: number;
+  };
   /** Set when the PR had more reviewable files than maxFilesPerRun. */
   fileSelection?: ReviewFileSelection;
   gateSummary?: GateSummary;

@@ -3,6 +3,8 @@
  * Exposed as JSON via GET /metrics.
  */
 
+import { cacheHitRate, estimateCostUsd, type TokenUsage } from "./cost.js";
+
 export interface MetricsSnapshot {
   counters: Record<string, number>;
   gauges: Record<string, number>;
@@ -32,6 +34,25 @@ class MetricsCollector {
       samples.shift();
     }
     this.histogramSamples.set(name, samples);
+  }
+
+  /**
+   * Record cost/latency telemetry for one agent run. Cost is stored in USD
+   * micro-units (1 USD = 1_000_000) so the histogram - which only stores
+   * numeric samples - stays integral instead of losing sub-cent precision.
+   */
+  recordAgentRun(usage: TokenUsage, model: string, durationMs: number): void {
+    const estimatedCostUsd = estimateCostUsd(usage, model);
+    const hitRate = cacheHitRate(usage);
+
+    this.observe("agent_duration_ms", durationMs);
+    this.observe(
+      "agent_cost_usd_micros",
+      Math.round(estimatedCostUsd * 1_000_000)
+    );
+    this.observe("agent_total_tokens", usage.totalTokens ?? 0);
+    this.observe("agent_cache_hit_rate_pct", hitRate * 100);
+    this.increment("agent_runs");
   }
 
   recordInlineComments(

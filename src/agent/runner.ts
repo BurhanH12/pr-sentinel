@@ -19,6 +19,7 @@ import { env } from "../env.js";
 import { logger } from "../utils/logger.js";
 import { formatDiffForPrompt } from "../github/diff.js";
 import { metrics } from "../observability/metrics.js";
+import { cacheHitRate, estimateCostUsd } from "../observability/cost.js";
 
 /*
  * Zod schema for the JSON the Cursor agent is asked to return.
@@ -120,6 +121,8 @@ export async function runPRReview(
   log.info({ files: fileSelection.files.length }, "Invoking Cursor agent");
 
   let raw: string;
+  let runCost: ReviewResult["runCost"];
+  const runStartedAt = Date.now();
   try {
     const result = await promptAgentWithRetry(prompt, {
       apiKey: env.CURSOR_API_KEY,
@@ -137,10 +140,44 @@ export async function runPRReview(
     }
 
     raw = result.result ?? "";
-    log.info(
-      { runId: result.id, durationMs: result.durationMs, chars: raw.length },
-      "Cursor agent finished"
-    );
+
+    /*
+     * Fall back to a wall-clock measurement when the SDK omits durationMs -
+     * the run still consumed time (and money) even if the SDK didn't report
+     * it. metrics.recordAgentRun is called exactly once here, before parsing
+     * branches into the success/parse-failure paths below, so a parse
+     * failure - which still cost tokens - is still recorded.
+     */
+    const durationMs = result.durationMs ?? Date.now() - runStartedAt;
+    const usage = result.usage ?? {};
+    metrics.recordAgentRun(usage, env.CURSOR_MODEL, durationMs);
+
+    if (result.usage) {
+      const estimatedCostUsd = estimateCostUsd(result.usage, env.CURSOR_MODEL);
+      const hitRate = cacheHitRate(result.usage);
+      runCost = {
+        usage: result.usage,
+        estimatedCostUsd,
+        cacheHitRate: hitRate,
+        durationMs,
+      };
+      log.info(
+        {
+          runId: result.id,
+          durationMs,
+          chars: raw.length,
+          tokens: result.usage.totalTokens,
+          estimatedCostUsd,
+          cacheHitRate: hitRate,
+        },
+        "Cursor agent finished"
+      );
+    } else {
+      log.info(
+        { runId: result.id, durationMs, chars: raw.length },
+        "Cursor agent finished"
+      );
+    }
   } catch (err) {
     if (err instanceof CursorAgentError) {
       log.error(
@@ -155,9 +192,12 @@ export async function runPRReview(
 
   const outcome = parseAgentOutput(raw);
   if (!outcome.ok) {
-    return buildParseFailureResult(outcome, raw);
+    return { ...buildParseFailureResult(outcome, raw), runCost };
   }
-  return finaliseResult(outcome.output, config, threadContext, fileSelection);
+  return {
+    ...finaliseResult(outcome.output, config, threadContext, fileSelection),
+    runCost,
+  };
 }
 
 // ─── Prompt builder ──────────────────────────────────────────────────────────
