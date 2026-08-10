@@ -45,10 +45,11 @@ const lineCommentSchema = z.object({
 export const agentOutputSchema = z.object({
   verdict: z.enum(["approve", "request_changes", "comment"]),
   summary: z.string().min(1),
+  checked: z.array(z.string().min(1)).max(6).default([]),
   issues: z.array(lineCommentSchema).default([]),
 });
 
-type AgentOutput = z.infer<typeof agentOutputSchema>;
+export type AgentOutput = z.infer<typeof agentOutputSchema>;
 
 const ISSUES_CAP = 10;
 
@@ -194,8 +195,15 @@ export async function runPRReview(
   if (!outcome.ok) {
     return { ...buildParseFailureResult(outcome, raw), runCost };
   }
+  const effectiveFocusAreas = resolveEffectiveFocusAreas(config, matchingPathRules);
   return {
-    ...finaliseResult(outcome.output, config, threadContext, fileSelection),
+    ...finaliseResult(
+      outcome.output,
+      config,
+      threadContext,
+      fileSelection,
+      effectiveFocusAreas
+    ),
     runCost,
   };
 }
@@ -258,6 +266,7 @@ Then return ONLY a JSON object with this exact shape — no prose, no markdown f
 {
   "verdict": "approve" | "comment" | "request_changes",
   "summary": "<2-5 sentence plain-text summary spanning all focus areas>",
+  "checked": ["<short past-tense statement of something you actually verified>", ...],
   "issues": [
     {
       "path": "<file path relative to repo root>",
@@ -271,6 +280,10 @@ Then return ONLY a JSON object with this exact shape — no prose, no markdown f
 \`\`\`
 
 Output rules:
+- "checked" is REQUIRED, even when no issues are found - especially then. Provide 3 to 6 entries,
+  each a short past-tense statement naming a concrete artefact from this PR (a file, a function, a
+  call site, a convention compared against). Never write something generic like "reviewed the
+  code" - "traced the 3 new exports in \`src/queue.ts\` to their 7 call sites" is the bar.
 - "issues" MUST be an empty array \`[]\` if nothing was found — never omit it.
 - "verdict" = "approve" when no issues, "comment" for low/info only, "request_changes" otherwise.
 - Do NOT invent issues. Only flag what you can point at in the diff or files.
@@ -526,7 +539,8 @@ function finaliseResult(
   output: AgentOutput,
   config: ReviewRulesConfig,
   threadContext?: ThreadContextBundle,
-  fileSelection?: ReviewFileSelection
+  fileSelection?: ReviewFileSelection,
+  effectiveFocusAreas: string[] = []
 ): ReviewResult {
   const suppression = suppressAcceptedThreadIssues(output.issues, threadContext);
   const issues: LineComment[] = suppression.issues;
@@ -540,7 +554,9 @@ function finaliseResult(
       issues,
       fileSelection,
       gateSummary,
-      suppression.suppressedAcceptedThreadCount
+      suppression.suppressedAcceptedThreadCount,
+      fileSelection?.files.length ?? 0,
+      effectiveFocusAreas
     ),
     issues,
     shouldFail,
@@ -592,12 +608,14 @@ function normaliseVerdict(
   return requestedVerdict;
 }
 
-function buildSummaryMarkdown(
+export function buildSummaryMarkdown(
   output: AgentOutput,
   issues: LineComment[],
   fileSelection?: ReviewFileSelection,
   gateSummary?: { blockEligibleCount: number; advisoryCount: number },
-  suppressedAcceptedThreadCount = 0
+  suppressedAcceptedThreadCount = 0,
+  reviewedFileCount = 0,
+  effectiveFocusAreas: string[] = []
 ): string {
   const counts: Record<Severity, number> = {
     critical: 0,
@@ -610,6 +628,22 @@ function buildSummaryMarkdown(
 
   const lines: string[] = [];
   lines.push(output.summary.trim());
+  lines.push("");
+
+  lines.push("**What was checked**");
+  lines.push("");
+  if (output.checked.length > 0) {
+    for (const entry of output.checked) lines.push(`- ${entry}`);
+  } else {
+    const fileWord = reviewedFileCount === 1 ? "file" : "files";
+    const focusAreaText =
+      effectiveFocusAreas.length > 0
+        ? effectiveFocusAreas.join(", ")
+        : "no configured focus areas";
+    lines.push(
+      `- Reviewed ${reviewedFileCount} ${fileWord} against focus areas: ${focusAreaText}.`
+    );
+  }
   lines.push("");
 
   if (suppressedAcceptedThreadCount > 0) {

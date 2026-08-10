@@ -15,7 +15,8 @@
  * the Markdown body produced for the PR summary comment.
  */
 import { describe, it, expect } from "vitest";
-import type { ReviewResult, ThreadContextBundle } from "../types.js";
+import type { ReviewResult, ThreadContextBundle, LineComment } from "../types.js";
+import { buildSummaryMarkdown, type AgentOutput } from "../agent/runner.js";
 
 /*
  * Inline reimplementation of the same builder logic used in comments.ts so we
@@ -94,6 +95,88 @@ function makeBundle(
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
+
+// ─── "What was checked" section ────────────────────────────────────────────
+
+function makeAgentOutput(partial: Partial<AgentOutput> = {}): AgentOutput {
+  return {
+    verdict: "approve",
+    summary: "Looks fine.",
+    checked: [],
+    issues: [],
+    ...partial,
+  };
+}
+
+describe("buildSummaryMarkdown: what was checked", () => {
+  it("renders checked entries as bullets when the model provided them", () => {
+    const output = makeAgentOutput({
+      checked: [
+        "Traced the 3 new exports in src/queue.ts to their 7 call sites.",
+        "Compared the new error handler against the convention in src/errors.ts.",
+      ],
+    });
+
+    const markdown = buildSummaryMarkdown(output, []);
+
+    expect(markdown).toContain("**What was checked**");
+    expect(markdown).toContain(
+      "- Traced the 3 new exports in src/queue.ts to their 7 call sites."
+    );
+    expect(markdown).toContain(
+      "- Compared the new error handler against the convention in src/errors.ts."
+    );
+  });
+
+  it("still renders the checked section on a clean review with no issues", () => {
+    const output = makeAgentOutput({
+      checked: ["Verified the new endpoint returns 404 for unknown ids."],
+    });
+
+    const markdown = buildSummaryMarkdown(output, []);
+
+    expect(markdown).toContain("**What was checked**");
+    expect(markdown).toContain("**No actionable issues found.**");
+    // the checked section must appear before the finding line
+    expect(markdown.indexOf("**What was checked**")).toBeLessThan(
+      markdown.indexOf("**No actionable issues found.**")
+    );
+  });
+
+  it("renders the file-count/focus-area fallback, not an empty section, when checked is empty", () => {
+    const output = makeAgentOutput({ checked: [] });
+
+    const markdown = buildSummaryMarkdown(
+      output,
+      [],
+      undefined,
+      undefined,
+      0,
+      4,
+      ["security", "performance"]
+    );
+
+    expect(markdown).toContain("**What was checked**");
+    expect(markdown).toContain(
+      "- Reviewed 4 files against focus areas: security, performance."
+    );
+  });
+
+  it("still surfaces issue counts alongside the checked section", () => {
+    const issues: LineComment[] = [
+      { path: "src/a.ts", line: 1, side: "RIGHT", body: "nit", severity: "low" },
+    ];
+    const output = makeAgentOutput({
+      checked: ["Reviewed the diff in src/a.ts."],
+      issues,
+    });
+
+    const markdown = buildSummaryMarkdown(output, issues);
+
+    expect(markdown).toContain("**What was checked**");
+    expect(markdown).toContain("**Issues found:** 1 total");
+  });
+});
 
 describe("summary comment: needs_human_review section", () => {
   it("includes the human-review section when needs_human_review threads exist", () => {
