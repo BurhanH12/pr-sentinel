@@ -38,6 +38,21 @@ describe("estimateCostUsd", () => {
   it("returns 0 for empty or absent usage", () => {
     expect(estimateCostUsd({}, "composer-2.5")).toBe(0);
   });
+
+  it("clamps billed input tokens at 0 when cacheReadTokens exceeds inputTokens", () => {
+    // Without the Math.max(0, ...) guard, billedInputTokens would go
+    // negative here (100 - 500 = -400), making inputCost negative and
+    // pulling the total cost below the cached-read-only cost.
+    const cost = estimateCostUsd(
+      { inputTokens: 100, cacheReadTokens: 500 },
+      "composer-2.5"
+    );
+    // billedInputTokens clamps to 0, so cost is exactly the discounted
+    // cache-read cost: 500 tokens @ 10% of $1.25/MTok.
+    const expected = (500 * 1.25 * 0.1) / 1_000_000;
+    expect(cost).toBeCloseTo(expected, 10);
+    expect(cost).toBeGreaterThanOrEqual(0);
+  });
 });
 
 describe("cacheHitRate", () => {

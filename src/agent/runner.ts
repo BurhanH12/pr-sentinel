@@ -175,7 +175,7 @@ export async function runPRReview(
     } else {
       log.info(
         { runId: result.id, durationMs, chars: raw.length },
-        "Cursor agent finished"
+        "Cursor agent finished (usage missing)"
       );
     }
   } catch (err) {

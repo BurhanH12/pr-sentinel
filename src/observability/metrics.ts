@@ -40,19 +40,36 @@ class MetricsCollector {
    * Record cost/latency telemetry for one agent run. Cost is stored in USD
    * micro-units (1 USD = 1_000_000) so the histogram - which only stores
    * numeric samples - stays integral instead of losing sub-cent precision.
+   *
+   * Duration and the run counter are recorded unconditionally - the run
+   * happened either way. The cost/token/cache-hit histograms are only
+   * observed when usage was "actually reported": at least one numeric
+   * field on `usage` is present. An absent `usage` object, or one with
+   * every field undefined, is not a measurement - observing 0 into those
+   * histograms in that case would silently read as "this run was free",
+   * indistinguishable from a real zero-cost run. Instead we increment
+   * `agent_usage_missing` so the gap is visible on GET /metrics.
    */
   recordAgentRun(usage: TokenUsage, model: string, durationMs: number): void {
+    this.observe("agent_duration_ms", durationMs);
+    this.increment("agent_runs");
+
+    const usageReported = Object.values(usage).some(
+      (value) => value !== undefined
+    );
+    if (!usageReported) {
+      this.increment("agent_usage_missing");
+      return;
+    }
+
     const estimatedCostUsd = estimateCostUsd(usage, model);
     const hitRate = cacheHitRate(usage);
-
-    this.observe("agent_duration_ms", durationMs);
     this.observe(
       "agent_cost_usd_micros",
       Math.round(estimatedCostUsd * 1_000_000)
     );
     this.observe("agent_total_tokens", usage.totalTokens ?? 0);
     this.observe("agent_cache_hit_rate_pct", hitRate * 100);
-    this.increment("agent_runs");
   }
 
   recordInlineComments(

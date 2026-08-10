@@ -4,6 +4,17 @@
  * `TokenUsage` mirrors the token fields the Cursor SDK reports on a
  * finished run (see agent/cursor-invoke.ts). All fields are optional
  * because the SDK may omit usage entirely.
+ *
+ * Ground truth as of `@cursor/sdk@1.0.13`: `RunResult`
+ * (`node_modules/@cursor/sdk/dist/esm/run.d.ts`) declares only `id`,
+ * `status`, `result`, `model`, `durationMs`, and `git` - no `usage` field,
+ * and none of the SDK's message types declare usage either. So everything
+ * in this module is plumbing that stays dormant - `usage` will be `{}` (or
+ * all-undefined) on every run - until the SDK actually starts reporting
+ * it. This is what the type declarations show, not a claim about what the
+ * SDK does at runtime; `metrics.recordAgentRun`'s `agent_usage_missing`
+ * counter (src/observability/metrics.ts) is how you tell, from the running
+ * system, whether usage ever arrives.
  */
 export interface TokenUsage {
   totalTokens?: number;
