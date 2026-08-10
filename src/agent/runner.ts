@@ -153,8 +153,11 @@ export async function runPRReview(
     throw err;
   }
 
-  const parsed = parseAgentOutput(raw);
-  return finaliseResult(parsed, config, threadContext, fileSelection);
+  const outcome = parseAgentOutput(raw);
+  if (!outcome.ok) {
+    return buildParseFailureResult(outcome, raw);
+  }
+  return finaliseResult(outcome.output, config, threadContext, fileSelection);
 }
 
 // ─── Prompt builder ──────────────────────────────────────────────────────────
@@ -339,7 +342,20 @@ function formatThreadEntry(t: ClassifiedThread): string {
 
 // ─── Output parsing ──────────────────────────────────────────────────────────
 
-function parseAgentOutput(raw: string): AgentOutput {
+/*
+ * Explicit parse outcome instead of a silent degrade. A parse failure must
+ * be distinguishable from "the model reviewed the PR and found nothing" -
+ * conflating the two turns a broken agent response into a green status.
+ */
+export type ParseOutcome =
+  | { ok: true; output: AgentOutput }
+  | {
+      ok: false;
+      reason: "no_json" | "invalid_json" | "schema_mismatch";
+      detail: string;
+    };
+
+export function parseAgentOutput(raw: string): ParseOutcome {
   /*
    * Models occasionally wrap JSON in ```json fences despite instructions, or
    * prepend a sentence. Strip both, then take the outermost {...} block.
@@ -358,9 +374,9 @@ function parseAgentOutput(raw: string): AgentOutput {
       "Agent output contained no JSON block"
     );
     return {
-      verdict: "comment",
-      summary: raw.slice(0, 500) || "Agent returned no parseable output.",
-      issues: [],
+      ok: false,
+      reason: "no_json",
+      detail: "No `{...}` JSON object was found in the agent output.",
     };
   }
 
@@ -374,9 +390,9 @@ function parseAgentOutput(raw: string): AgentOutput {
       "Agent output was not valid JSON"
     );
     return {
-      verdict: "comment",
-      summary: raw.slice(0, 500),
-      issues: [],
+      ok: false,
+      reason: "invalid_json",
+      detail: err instanceof Error ? err.message : "JSON.parse failed.",
     };
   }
 
@@ -384,19 +400,27 @@ function parseAgentOutput(raw: string): AgentOutput {
   if (!parsed.success) {
     logger.warn(
       { issues: parsed.error.issues, preview: candidate.slice(0, 200) },
-      "Agent JSON failed schema validation; using degraded fallback"
+      "Agent JSON failed schema validation"
     );
-    const fallback = json as { summary?: unknown; verdict?: unknown };
+    const zodDetail = parsed.error.issues
+      .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
+      .join("; ");
+    /*
+     * A schema-mismatch response sometimes still carries a usable "summary"
+     * string from the model. Fold it into the failure detail so a human can
+     * see it - it must never be promoted into a successful result.
+     */
+    const fallback = json as { summary?: unknown };
+    const salvagedSummary =
+      typeof fallback.summary === "string" && fallback.summary.length > 0
+        ? fallback.summary
+        : undefined;
     return {
-      verdict:
-        typeof fallback.verdict === "string"
-          ? validateVerdict(fallback.verdict) ?? "comment"
-          : "comment",
-      summary:
-        typeof fallback.summary === "string" && fallback.summary.length > 0
-          ? fallback.summary
-          : raw.slice(0, 500),
-      issues: [],
+      ok: false,
+      reason: "schema_mismatch",
+      detail: salvagedSummary
+        ? `${zodDetail} (agent-provided summary: "${salvagedSummary.slice(0, 200)}")`
+        : zodDetail,
     };
   }
 
@@ -409,18 +433,38 @@ function parseAgentOutput(raw: string): AgentOutput {
     metrics.increment("agent_issues_overshoot_dropped", droppedCount);
   }
 
-  return { ...parsed.data, issues };
+  return { ok: true, output: { ...parsed.data, issues } };
 }
 
-function validateVerdict(value: string): Verdict | null {
-  switch (value) {
-    case "approve":
-    case "comment":
-    case "request_changes":
-      return value;
-    default:
-      return null;
-  }
+/*
+ * Build a fail-closed ReviewResult for a parse failure. Bypasses
+ * finaliseResult on purpose: that path runs normaliseVerdict, which turns an
+ * empty issue list into verdict "approve" - exactly the green-status-on-broken-
+ * response outcome this task exists to prevent.
+ */
+export function buildParseFailureResult(
+  outcome: Extract<ParseOutcome, { ok: false }>,
+  raw: string
+): ReviewResult {
+  metrics.increment("agent_output_parse_failures");
+
+  const preview = raw.slice(0, 300);
+  const summary = [
+    `The reviewer could not read the model's response (reason: \`${outcome.reason}\`). The review did not pass - it errored.`,
+    outcome.detail,
+    "",
+    "First 300 characters of the raw output:",
+    "```",
+    preview,
+    "```",
+  ].join("\n");
+
+  return {
+    verdict: "comment",
+    summary,
+    issues: [],
+    shouldFail: true,
+  };
 }
 
 // ─── Severity gating ─────────────────────────────────────────────────────────
