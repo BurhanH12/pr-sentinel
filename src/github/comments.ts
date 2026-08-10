@@ -6,6 +6,7 @@ import type {
   ThreadContextBundle,
 } from "../types.js";
 import { logger } from "../utils/logger.js";
+import type { TokenUsage } from "../observability/cost.js";
 
 const BOT_COMMENT_MARKER = "<!-- cursor-pr-agent -->";
 
@@ -243,6 +244,27 @@ async function postCommentsIndividually(
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+export function formatCostFooter(runCost: ReviewResult["runCost"]): string {
+  if (!runCost) return "";
+
+  const costStr = runCost.estimatedCostUsd.toFixed(2);
+  const durationStr = Math.round(runCost.durationMs / 1000);
+  const cacheHitPct = Math.round(runCost.cacheHitRate * 100);
+
+  // Build token count part if available; omit entirely if missing.
+  const tokenCountPart =
+    runCost.usage.totalTokens !== undefined
+      ? ` (${runCost.usage.totalTokens.toLocaleString("en-US")} tokens`
+      : "";
+
+  const cachePartAndClose =
+    runCost.usage.totalTokens !== undefined
+      ? `, ${cacheHitPct}% cache hit)`
+      : "";
+
+  return `This review used $${costStr} of compute${tokenCountPart}${cachePartAndClose} in ${durationStr}s.`;
+}
+
 async function findExistingBotComment(
   octokit: Octokit,
   owner: string,
@@ -292,6 +314,8 @@ function buildSummaryBody(result: ReviewResult): string {
 
   const humanReviewSection = buildNeedsHumanReviewSection(result.threadContext);
   const degradedNote = buildContextDegradedNote(result.threadContext);
+  const costFooter = formatCostFooter(result.runCost);
+  const costLine = costFooter ? `<sub>${costFooter}</sub>\n` : "";
 
   return `${BOT_COMMENT_MARKER}
 ## ${emoji} Cursor PR Review — ${verdictLabel}
@@ -299,7 +323,7 @@ function buildSummaryBody(result: ReviewResult): string {
 ${result.summary}
 ${humanReviewSection}${degradedNote}
 ---
-<sub>Powered by <a href="https://cursor.com">Cursor SDK</a> · Push a new commit to re-run.</sub>
+${costLine}<sub>Powered by <a href="https://cursor.com">Cursor SDK</a> · Push a new commit to re-run.</sub>
 `;
 }
 
