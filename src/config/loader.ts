@@ -2,10 +2,46 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import type { Octokit } from "@octokit/rest";
+import { z } from "zod";
 import type { ReviewRulesConfig } from "../types.js";
 import { matchesAnyPattern } from "../github/diff.js";
 import { env } from "../env.js";
 import { logger } from "../utils/logger.js";
+
+const severitySchema = z.enum(["critical", "high", "medium", "low", "info"]);
+
+const reviewSkillRefSchema = z.enum([
+  "code-review-and-quality",
+  "nestjs-best-practices",
+  "security-best-practices",
+  "next-best-practices",
+  "vercel-react-best-practices",
+]);
+
+const pathRulePackSchema = z.object({
+  patterns: z.array(z.string()),
+  rules: z.string().optional(),
+  focusAreas: z.array(z.string()).optional(),
+  skillRefs: z.array(reviewSkillRefSchema).optional(),
+  failureThreshold: severitySchema.optional(),
+});
+
+/*
+ * Schema for a per-repo/central-config JSON override. Every field optional
+ * (a layer only overrides what it sets); the output type is pinned to
+ * Partial<ReviewRulesConfig> so a drift between this schema and src/types.ts
+ * is a typecheck error, not a silent runtime gap.
+ */
+export const reviewRulesConfigSchema: z.ZodType<Partial<ReviewRulesConfig>> =
+  z.object({
+    rules: z.string().optional(),
+    blockOnFailure: z.boolean().optional(),
+    failureThreshold: severitySchema.optional(),
+    excludePatterns: z.array(z.string()).optional(),
+    maxFilesPerRun: z.number().int().positive().optional(),
+    focusAreas: z.array(z.string()).optional(),
+    pathRules: z.array(pathRulePackSchema).optional(),
+  });
 
 /*
  * Layered review-config resolution.
@@ -155,8 +191,9 @@ async function fetchJsonFromRepo(
   const raw = await fetchFileContent(octokit, owner, repo, ref, path);
   if (!raw) return null;
 
+  let parsed: unknown;
   try {
-    return JSON.parse(raw) as Partial<ReviewRulesConfig>;
+    parsed = JSON.parse(raw);
   } catch (err) {
     logger.warn(
       { err, owner, repo, path },
@@ -164,6 +201,16 @@ async function fetchJsonFromRepo(
     );
     return null;
   }
+
+  const result = reviewRulesConfigSchema.safeParse(parsed);
+  if (!result.success) {
+    logger.warn(
+      { owner, repo, path, issues: result.error.issues },
+      "Config JSON failed schema validation; ignoring"
+    );
+    return null;
+  }
+  return result.data;
 }
 
 async function fetchMarkdownFromRepo(
@@ -194,19 +241,36 @@ async function fetchFileContent(
   }
 }
 
+/*
+ * Assigns a single field, generic over the field's key so the value type on
+ * each side stays in lockstep without an `any` cast.
+ */
+function assignDefinedField<K extends keyof ReviewRulesConfig>(
+  target: ReviewRulesConfig,
+  override: Partial<ReviewRulesConfig>,
+  key: K
+): void {
+  const value = override[key];
+  if (value !== undefined) {
+    target[key] = value;
+  }
+}
+
+/*
+ * Overwrites every field the override explicitly defines, leaving the rest
+ * of `base` untouched. Driven by `Object.keys(override)` so a new
+ * ReviewRulesConfig field is picked up automatically instead of needing a
+ * matching line added here.
+ */
 export function mergeConfig(
   base: ReviewRulesConfig,
   override: Partial<ReviewRulesConfig>
 ): ReviewRulesConfig {
-  return {
-    rules: override.rules ?? base.rules,
-    blockOnFailure: override.blockOnFailure ?? base.blockOnFailure,
-    failureThreshold: override.failureThreshold ?? base.failureThreshold,
-    excludePatterns: override.excludePatterns ?? base.excludePatterns,
-    maxFilesPerRun: override.maxFilesPerRun ?? base.maxFilesPerRun,
-    focusAreas: override.focusAreas ?? base.focusAreas,
-    pathRules: override.pathRules ?? base.pathRules,
-  };
+  const merged: ReviewRulesConfig = { ...base };
+  for (const key of Object.keys(override) as Array<keyof ReviewRulesConfig>) {
+    assignDefinedField(merged, override, key);
+  }
+  return merged;
 }
 
 /**
