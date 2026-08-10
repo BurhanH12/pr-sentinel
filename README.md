@@ -40,7 +40,7 @@ orchestratePRReview(pr)
     ├── Fetch PR diff (filtered, truncated) + checkout head SHA (mirror → clone fallback)
     │
     ▼
-@cursor/sdk Agent.prompt({ local: { cwd } })  + confidence/risk gating
+@cursor/sdk Agent.prompt({ local: { cwd } })  + severity gating
     │
     ▼
 GitHub

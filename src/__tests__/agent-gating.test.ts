@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { computeShouldFail } from "../agent/gating.js";
-import { agentOutputSchema } from "../agent/runner.js";
+import { truncateIssuesToTop } from "../agent/runner.js";
 import type { LineComment, ReviewRulesConfig } from "../types.js";
 
 const baseConfig: ReviewRulesConfig = {
@@ -49,21 +49,54 @@ describe("computeShouldFail", () => {
   });
 });
 
-describe("agentOutputSchema issues cap", () => {
-  it("rejects an issues array of length 11", () => {
-    const elevenIssues = Array.from({ length: 11 }, (_, i) => ({
-      path: "a.ts",
-      line: i + 1,
-      severity: "low",
-      body: "issue",
-    }));
+describe("truncateIssuesToTop", () => {
+  it("parses an 11-issue overshoot down to exactly 10, keeping the highest severities", () => {
+    const severities: LineComment["severity"][] = [
+      "critical",
+      "critical",
+      "critical",
+      "critical",
+      "critical",
+      "high",
+      "high",
+      "high",
+      "medium",
+      "medium",
+      "low", // the one that should be dropped
+    ];
+    const issues = severities.map((severity, i) =>
+      issue({ severity, line: i + 1 })
+    );
 
-    const result = agentOutputSchema.safeParse({
-      verdict: "comment",
-      summary: "summary",
-      issues: elevenIssues,
-    });
+    const result = truncateIssuesToTop(issues);
 
-    expect(result.success).toBe(false);
+    expect(result.issues).toHaveLength(10);
+    expect(result.droppedCount).toBe(1);
+    expect(result.issues.some((i) => i.severity === "low")).toBe(false);
+    expect(result.issues.filter((i) => i.severity === "critical")).toHaveLength(5);
+  });
+
+  it("leaves a 10-issue payload untouched", () => {
+    const issues = Array.from({ length: 10 }, (_, i) =>
+      issue({ severity: "medium", line: i + 1 })
+    );
+
+    const result = truncateIssuesToTop(issues);
+
+    expect(result.issues).toEqual(issues);
+    expect(result.droppedCount).toBe(0);
+  });
+
+  it("is stable within a severity band, preserving original relative order", () => {
+    const issues = Array.from({ length: 11 }, (_, i) =>
+      issue({ severity: "medium", line: i + 1, body: `issue-${i}` })
+    );
+
+    const result = truncateIssuesToTop(issues);
+
+    expect(result.issues).toHaveLength(10);
+    expect(result.issues.map((i) => i.body)).toEqual(
+      issues.slice(0, 10).map((i) => i.body)
+    );
   });
 });

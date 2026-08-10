@@ -18,6 +18,7 @@ import type {
 import { env } from "../env.js";
 import { logger } from "../utils/logger.js";
 import { formatDiffForPrompt } from "../github/diff.js";
+import { metrics } from "../observability/metrics.js";
 
 /*
  * Zod schema for the JSON the Cursor agent is asked to return.
@@ -33,13 +34,49 @@ const lineCommentSchema = z.object({
   body: z.string().min(1),
 });
 
+/*
+ * The array itself is unbounded at parse time. The model is told "maximum 10
+ * issues" in the prompt, but a zod `.max()` here would make an 11-issue
+ * overshoot fail `safeParse` for the *whole* object — silently discarding a
+ * real, otherwise-good review down to zero issues. Overshoot is handled
+ * after a successful parse instead, by `truncateIssuesToTop` below.
+ */
 export const agentOutputSchema = z.object({
   verdict: z.enum(["approve", "request_changes", "comment"]),
   summary: z.string().min(1),
-  issues: z.array(lineCommentSchema).max(10).default([]),
+  issues: z.array(lineCommentSchema).default([]),
 });
 
 type AgentOutput = z.infer<typeof agentOutputSchema>;
+
+const ISSUES_CAP = 10;
+
+/*
+ * Enforce the 10-issue cap post-parse: sort by severity (critical highest),
+ * stable within a severity band so ties keep the model's original order,
+ * then keep the top `cap`. Pure and exported so it is unit-testable without
+ * invoking the model.
+ */
+export function truncateIssuesToTop(
+  issues: LineComment[],
+  cap = ISSUES_CAP
+): { issues: LineComment[]; droppedCount: number } {
+  if (issues.length <= cap) {
+    return { issues, droppedCount: 0 };
+  }
+
+  const ranked = issues
+    .map((issue, index) => ({ issue, index }))
+    .sort((a, b) => {
+      const rankDiff = SEVERITY_RANK[b.issue.severity] - SEVERITY_RANK[a.issue.severity];
+      return rankDiff !== 0 ? rankDiff : a.index - b.index;
+    });
+
+  return {
+    issues: ranked.slice(0, cap).map((entry) => entry.issue),
+    droppedCount: issues.length - cap,
+  };
+}
 
 /*
  * Run a single combined PR review against a local checkout of the PR head SHA.
@@ -363,7 +400,16 @@ function parseAgentOutput(raw: string): AgentOutput {
     };
   }
 
-  return parsed.data;
+  const { issues, droppedCount } = truncateIssuesToTop(parsed.data.issues);
+  if (droppedCount > 0) {
+    logger.warn(
+      { total: parsed.data.issues.length, droppedCount, cap: ISSUES_CAP },
+      "Agent overshot the issues cap; dropped the lowest-severity excess"
+    );
+    metrics.increment("agent_issues_overshoot_dropped", droppedCount);
+  }
+
+  return { ...parsed.data, issues };
 }
 
 function validateVerdict(value: string): Verdict | null {

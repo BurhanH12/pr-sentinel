@@ -1,8 +1,6 @@
 {
   "blockOnFailure": true,
   "failureThreshold": "high",
-  "minConfidenceToBlock": 0.7,
-  "riskThreshold": "medium",
   "pathRules": [
     {
       "patterns": ["apps/api/**"],
