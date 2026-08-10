@@ -34,9 +34,14 @@ class MetricsCollector {
     this.histogramSamples.set(name, samples);
   }
 
-  recordInlineComments(posted: number, dropped: number): void {
+  recordInlineComments(
+    posted: number,
+    dropped: number,
+    deduplicated: number
+  ): void {
     this.increment("inline_comments_posted", posted);
     this.increment("inline_comments_dropped", dropped);
+    this.increment("inline_comments_deduplicated", deduplicated);
   }
 
   snapshot(): MetricsSnapshot {

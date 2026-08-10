@@ -195,7 +195,11 @@ export async function orchestratePRReview(
       reviewResult.issues,
       changedPathSet(fileSelection.files)
     );
-    metrics.recordInlineComments(inlineStats.posted, inlineStats.dropped);
+    metrics.recordInlineComments(
+      inlineStats.posted,
+      inlineStats.dropped,
+      inlineStats.deduplicated
+    );
 
     if (await isStale()) {
       log.info(

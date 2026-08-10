@@ -72,14 +72,35 @@ export async function postInlineComments(
   headSha: string,
   issues: LineComment[],
   changedPaths: ReadonlySet<string>
-): Promise<{ posted: number; dropped: number }> {
+): Promise<{ posted: number; dropped: number; deduplicated: number }> {
   const eligible = issues.filter(
     (i) => i.line > 0 && i.path.length > 0 && changedPaths.has(i.path)
   );
 
-  if (eligible.length === 0) return { posted: 0, dropped: 0 };
+  if (eligible.length === 0) return { posted: 0, dropped: 0, deduplicated: 0 };
 
-  const comments = eligible.map((issue) => ({
+  /*
+   * A GitHub API failure here must never lose a review - if we can't tell
+   * what's already posted, we fall back to posting everything rather than
+   * dropping findings.
+   */
+  let existing: { path: string; line: number }[] = [];
+  try {
+    existing = await fetchExistingBotComments(octokit, owner, repo, prNumber);
+  } catch (err) {
+    logger.warn(
+      { err, owner, repo, prNumber },
+      "Failed to fetch existing bot comments; posting without dedup"
+    );
+  }
+
+  const { kept, droppedDuplicates } = dropDuplicateIssues(eligible, existing);
+
+  if (kept.length === 0) {
+    return { posted: 0, dropped: 0, deduplicated: droppedDuplicates };
+  }
+
+  const comments = kept.map((issue) => ({
     path: issue.path,
     line: issue.line,
     side: issue.side,
@@ -100,21 +121,88 @@ export async function postInlineComments(
       { owner, repo, prNumber, count: comments.length },
       "Posted inline review comments"
     );
-    return { posted: comments.length, dropped: 0 };
+    return {
+      posted: comments.length,
+      dropped: 0,
+      deduplicated: droppedDuplicates,
+    };
   } catch (err) {
     logger.warn(
       { err, owner, repo, prNumber, count: comments.length },
       "Bulk inline review rejected; falling back to per-comment posts"
     );
-    return await postCommentsIndividually(
+    const fallback = await postCommentsIndividually(
       octokit,
       owner,
       repo,
       prNumber,
       headSha,
-      eligible
+      kept
     );
+    return { ...fallback, deduplicated: droppedDuplicates };
   }
+}
+
+/*
+ * Fetch the PR's existing review comments authored by this bot, identified by
+ * BOT_COMMENT_MARKER in the body. Used to dedup findings across re-runs.
+ */
+export async function fetchExistingBotComments(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  prNumber: number
+): Promise<{ path: string; line: number }[]> {
+  const result: { path: string; line: number }[] = [];
+
+  for (let page = 1; ; page++) {
+    const { data } = await octokit.pulls.listReviewComments({
+      owner,
+      repo,
+      pull_number: prNumber,
+      per_page: 100,
+      page,
+    });
+
+    for (const comment of data) {
+      if (!comment.body.includes(BOT_COMMENT_MARKER)) continue;
+      result.push({
+        path: comment.path,
+        line: comment.line ?? comment.original_line ?? 0,
+      });
+    }
+
+    if (data.length < 100) break;
+  }
+
+  return result;
+}
+
+/*
+ * An issue is considered a duplicate of an existing bot comment when both
+ * point at the same path and their lines are within 3 of each other - the
+ * same tolerance suppressAcceptedThreadIssues uses, since diffs shift line
+ * numbers slightly between pushes without changing the underlying finding.
+ */
+export function dropDuplicateIssues(
+  issues: LineComment[],
+  existing: { path: string; line: number }[]
+): { kept: LineComment[]; droppedDuplicates: number } {
+  const kept: LineComment[] = [];
+  let droppedDuplicates = 0;
+
+  for (const issue of issues) {
+    const isDuplicate = existing.some(
+      (e) => e.path === issue.path && Math.abs(e.line - issue.line) <= 3
+    );
+    if (isDuplicate) {
+      droppedDuplicates += 1;
+    } else {
+      kept.push(issue);
+    }
+  }
+
+  return { kept, droppedDuplicates };
 }
 
 async function postCommentsIndividually(
@@ -271,7 +359,9 @@ function formatInlineComment(issue: LineComment): string {
   const meta = `confidence ${(issue.confidence * 100).toFixed(0)}% · risk ${
     issue.risk
   }`;
-  return `${severityBadge(issue.severity)} _(${meta})_\n\n${issue.body}`;
+  return `${BOT_COMMENT_MARKER}\n${severityBadge(
+    issue.severity
+  )} _(${meta})_\n\n${issue.body}`;
 }
 
 function capitalise(s: string): string {
