@@ -322,7 +322,8 @@ rules attached to this repo:
   aliases over inference for return types and DTOs.
 - **DTOs**: anything entering the system from an external source (webhook
   payload → `PullRequestContext`, agent JSON → `agentOutputSchema`, env →
-  `envSchema`) goes through an explicit type + zod validator.
+  `envSchema`, config JSON layers → `reviewRulesConfigSchema`) goes through
+  an explicit type + zod validator.
 - **Comments**: multi-line block comments above non-obvious logic explaining
   **why**, not what. Single-line redundant comments (`// Increment x`,
   `// Loop over files`) are removed. No "Updated X / Added Y" change-log

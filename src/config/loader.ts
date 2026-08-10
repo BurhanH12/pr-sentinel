@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import type { Octokit } from "@octokit/rest";
 import { z } from "zod";
-import type { ReviewRulesConfig } from "../types.js";
+import type { PathRulePack, ReviewRulesConfig } from "../types.js";
 import { matchesAnyPattern } from "../github/diff.js";
 import { env } from "../env.js";
 import { logger } from "../utils/logger.js";
@@ -18,30 +18,54 @@ const reviewSkillRefSchema = z.enum([
   "vercel-react-best-practices",
 ]);
 
-const pathRulePackSchema = z.object({
+/*
+ * Mapped-type shapes below force every key of PathRulePack / ReviewRulesConfig
+ * to have a matching schema property. `-?` makes each mapped key required on
+ * the shape object itself, so if src/types.ts gains a field and this file
+ * isn't updated, the shape object literal fails to satisfy its annotated
+ * type ("Property 'x' is missing") and `pnpm typecheck` fails - the field
+ * can no longer be silently dropped at the schema boundary.
+ */
+type PathRulePackShape = {
+  [K in keyof PathRulePack]-?: z.ZodType<PathRulePack[K] | undefined>;
+};
+
+const pathRulePackShape: PathRulePackShape = {
   patterns: z.array(z.string()),
   rules: z.string().optional(),
   focusAreas: z.array(z.string()).optional(),
   skillRefs: z.array(reviewSkillRefSchema).optional(),
   failureThreshold: severitySchema.optional(),
-});
+};
+
+const pathRulePackSchema: z.ZodType<PathRulePack> = z.object(
+  pathRulePackShape
+) as z.ZodType<PathRulePack>;
 
 /*
  * Schema for a per-repo/central-config JSON override. Every field optional
- * (a layer only overrides what it sets); the output type is pinned to
- * Partial<ReviewRulesConfig> so a drift between this schema and src/types.ts
- * is a typecheck error, not a silent runtime gap.
+ * (a layer only overrides what it sets); the shape is built from a mapped
+ * type over keyof ReviewRulesConfig (see PathRulePackShape above for the
+ * mechanism) so a field added to src/types.ts without a matching schema
+ * entry here fails `pnpm typecheck` instead of being silently stripped by
+ * zod at parse time.
  */
+type ReviewRulesConfigShape = {
+  [K in keyof ReviewRulesConfig]-?: z.ZodType<ReviewRulesConfig[K] | undefined>;
+};
+
+const reviewRulesConfigShape: ReviewRulesConfigShape = {
+  rules: z.string().optional(),
+  blockOnFailure: z.boolean().optional(),
+  failureThreshold: severitySchema.optional(),
+  excludePatterns: z.array(z.string()).optional(),
+  maxFilesPerRun: z.number().int().positive().optional(),
+  focusAreas: z.array(z.string()).optional(),
+  pathRules: z.array(pathRulePackSchema).optional(),
+};
+
 export const reviewRulesConfigSchema: z.ZodType<Partial<ReviewRulesConfig>> =
-  z.object({
-    rules: z.string().optional(),
-    blockOnFailure: z.boolean().optional(),
-    failureThreshold: severitySchema.optional(),
-    excludePatterns: z.array(z.string()).optional(),
-    maxFilesPerRun: z.number().int().positive().optional(),
-    focusAreas: z.array(z.string()).optional(),
-    pathRules: z.array(pathRulePackSchema).optional(),
-  });
+  z.object(reviewRulesConfigShape) as z.ZodType<Partial<ReviewRulesConfig>>;
 
 /*
  * Layered review-config resolution.
