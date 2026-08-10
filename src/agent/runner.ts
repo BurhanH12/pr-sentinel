@@ -30,15 +30,13 @@ const lineCommentSchema = z.object({
   line: z.number().int().positive(),
   side: z.enum(["RIGHT", "LEFT"]).default("RIGHT"),
   severity: z.enum(["critical", "high", "medium", "low", "info"]),
-  confidence: z.number().min(0).max(1).default(0.8),
-  risk: z.enum(["critical", "high", "medium", "low", "info"]).default("medium"),
   body: z.string().min(1),
 });
 
-const agentOutputSchema = z.object({
+export const agentOutputSchema = z.object({
   verdict: z.enum(["approve", "request_changes", "comment"]),
   summary: z.string().min(1),
-  issues: z.array(lineCommentSchema).max(50).default([]),
+  issues: z.array(lineCommentSchema).max(10).default([]),
 });
 
 type AgentOutput = z.infer<typeof agentOutputSchema>;
@@ -186,8 +184,6 @@ Then return ONLY a JSON object with this exact shape — no prose, no markdown f
       "line": <positive integer — line number in the NEW file (right side of diff)>,
       "side": "RIGHT" | "LEFT",
       "severity": "critical" | "high" | "medium" | "low" | "info",
-      "confidence": <number 0.0-1.0 — how sure you are this is a real issue>,
-      "risk": "critical" | "high" | "medium" | "low" | "info",
       "body": "<concise, actionable explanation of the issue and how to fix it>"
     }
   ]
@@ -198,7 +194,7 @@ Output rules:
 - "issues" MUST be an empty array \`[]\` if nothing was found — never omit it.
 - "verdict" = "approve" when no issues, "comment" for low/info only, "request_changes" otherwise.
 - Do NOT invent issues. Only flag what you can point at in the diff or files.
-- Maximum 50 issues total. Prioritise critical/high.
+- Maximum 10 issues total. If you find more, report only the 10 highest-severity ones - a review that reports twenty speculative findings around one real one has failed.
 - Keep "body" actionable — name the fix, don't just describe the smell.
 `;
 }
@@ -508,7 +504,7 @@ function buildSummaryMarkdown(
     (gateSummary.blockEligibleCount > 0 || gateSummary.advisoryCount > 0)
   ) {
     lines.push(
-      `**Merge gate:** ${gateSummary.blockEligibleCount} block-eligible · ${gateSummary.advisoryCount} advisory-only (low confidence/risk)`
+      `**Merge gate:** ${gateSummary.blockEligibleCount} block-eligible · ${gateSummary.advisoryCount} advisory-only (below failure threshold)`
     );
     lines.push("");
   }

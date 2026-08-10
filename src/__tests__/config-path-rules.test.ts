@@ -6,8 +6,6 @@ const base: ReviewRulesConfig = {
   rules: "base",
   blockOnFailure: false,
   failureThreshold: "high",
-  minConfidenceToBlock: 0.7,
-  riskThreshold: "medium",
   excludePatterns: [],
   maxFilesPerRun: 40,
   focusAreas: ["security"],
@@ -18,10 +16,10 @@ describe("mergeConfig", () => {
   it("merges pathRules and gate fields from override", () => {
     const merged = mergeConfig(base, {
       pathRules: [{ patterns: ["apps/web/**"], rules: "Next rules" }],
-      minConfidenceToBlock: 0.8,
+      failureThreshold: "critical",
     });
     expect(merged.pathRules).toHaveLength(1);
-    expect(merged.minConfidenceToBlock).toBe(0.8);
+    expect(merged.failureThreshold).toBe("critical");
   });
 });
 

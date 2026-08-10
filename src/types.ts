@@ -21,12 +21,6 @@ export interface ReviewRulesConfig {
   /** Minimum severity that counts as a failure. */
   failureThreshold: Severity;
 
-  /** Minimum per-issue confidence (0–1) required to count toward merge block. */
-  minConfidenceToBlock: number;
-
-  /** Minimum per-issue risk level required to count toward merge block. */
-  riskThreshold: Severity;
-
   /** Glob patterns excluded from the diff sent to the agent. */
   excludePatterns: string[];
 
@@ -170,10 +164,6 @@ export interface LineComment {
   side: "RIGHT" | "LEFT";
   body: string;
   severity: Severity;
-  /** Model confidence 0–1 that this finding is valid. */
-  confidence: number;
-  /** Estimated risk if the issue ships unchanged. */
-  risk: Severity;
 }
 
 export interface PathRulePack {
@@ -185,8 +175,6 @@ export interface PathRulePack {
   /** Review skill folders under skills/ to inject when this pack matches. */
   skillRefs?: ReviewSkillRef[];
   failureThreshold?: Severity;
-  minConfidenceToBlock?: number;
-  riskThreshold?: Severity;
 }
 
 export type ReviewSkillRef =

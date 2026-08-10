@@ -13,8 +13,6 @@ function makeIssue(path: string, line: number): LineComment {
     side: "RIGHT",
     body: "some finding",
     severity: "medium",
-    confidence: 0.8,
-    risk: "medium",
   };
 }
 

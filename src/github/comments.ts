@@ -356,12 +356,9 @@ function buildContextDegradedNote(
 }
 
 function formatInlineComment(issue: LineComment): string {
-  const meta = `confidence ${(issue.confidence * 100).toFixed(0)}% · risk ${
-    issue.risk
+  return `${BOT_COMMENT_MARKER}\n${severityBadge(issue.severity)}\n\n${
+    issue.body
   }`;
-  return `${BOT_COMMENT_MARKER}\n${severityBadge(
-    issue.severity
-  )} _(${meta})_\n\n${issue.body}`;
 }
 
 function capitalise(s: string): string {

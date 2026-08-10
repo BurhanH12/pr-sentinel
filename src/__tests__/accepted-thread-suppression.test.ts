@@ -8,8 +8,6 @@ function issue(partial: Partial<LineComment> = {}): LineComment {
     line: 40,
     side: "RIGHT",
     severity: "high",
-    confidence: 0.9,
-    risk: "high",
     body: "Repeated finding.",
     ...partial,
   };

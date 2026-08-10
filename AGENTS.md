@@ -137,7 +137,7 @@ agent-orchestrator/
     ├── agent/
     │   ├── runner.ts                      ← builds the review prompt, invokes the agent, parses/gates the JSON result
     │   ├── cursor-invoke.ts               ← @cursor/sdk Agent.prompt wrapper with retry on retryable CursorAgentError
-    │   ├── gating.ts                      ← severity/risk/confidence merge-gate computation (computeShouldFail)
+    │   ├── gating.ts                      ← severity-only merge-gate computation (computeShouldFail)
     │   └── runtime-knowledge.ts           ← detects target repo stack + injects AGENTS.md/CONTEXT.md and skill files
     │
     ├── config/
@@ -227,8 +227,7 @@ target repo's webhook UI (Settings → Webhooks → Add webhook), matching
 Resolved per PR by `src/config/loader.ts`. Later layers win, per-field:
 
 1. **`ORG_DEFAULTS`** - hard-coded in `loader.ts` (`focusAreas`,
-   `failureThreshold: "high"`, `minConfidenceToBlock`, `riskThreshold`,
-   `pathRules`, exclude globs for lockfiles / dist / etc.).
+   `failureThreshold: "high"`, `pathRules`, exclude globs for lockfiles / dist / etc.).
 2. **`cursor-config/review-rules.md`** — bundled with the orchestrator; only
    overrides the `rules` field. Focused on NestJS and Next.js projects.
    This markdown file and the skill files under `skills/` are injected into
@@ -250,8 +249,6 @@ interface ReviewRulesConfig {
   rules: string; // markdown injected into the prompt; default ""
   blockOnFailure: boolean; // true → status state="failure" can block merge; default false
   failureThreshold: Severity; // critical | high | medium | low | info; default "high"
-  minConfidenceToBlock: number; // 0-1, min per-issue confidence to count toward merge block; default 0.7
-  riskThreshold: Severity; // min per-issue risk to count toward merge block; default "medium"
   excludePatterns: string[]; // glob patterns excluded from review (lockfiles, dist/**, etc.)
   maxFilesPerRun: number; // hard cap, default 40
   focusAreas: string[]; // prompt-only knob; default [correctness, security, architecture, performance, consistency]
@@ -259,11 +256,17 @@ interface ReviewRulesConfig {
 }
 ```
 
-A finding only counts toward `blockOnFailure` when its severity, risk, and
-confidence all clear their respective thresholds (`src/agent/gating.ts`,
-`computeShouldFail`).
-Findings that clear the severity threshold alone are surfaced as advisory,
-not block-eligible.
+A finding counts toward `blockOnFailure` when its severity alone clears
+`failureThreshold` (`src/agent/gating.ts`, `computeShouldFail`).
+Findings below that threshold are surfaced as advisory, not block-eligible.
+Earlier versions of this gate also required per-issue `confidence` and
+`risk` to clear their own thresholds.
+Both were self-reported by the model - an uncalibrated number for
+confidence and an enum duplicating severity for risk - and both were
+removed rather than merely stopped from rendering.
+Confidence-style gating returns only once a calibrated signal exists, for
+example cross-pass agreement across repeated reviews; that is a later
+phase, not a restoration of the old field.
 
 `ORG_DEFAULTS.pathRules` ships two packs out of the box: one for
 `apps/api/**` / `api/**` / `server/**` (backend focus areas, NestJS and

@@ -48,8 +48,6 @@ const ORG_DEFAULTS: ReviewRulesConfig = {
     "performance",
     "consistency",
   ],
-  minConfidenceToBlock: 0.7,
-  riskThreshold: "medium",
   pathRules: [
     {
       patterns: ["apps/api/**", "api/**", "server/**"],
@@ -207,9 +205,6 @@ export function mergeConfig(
     excludePatterns: override.excludePatterns ?? base.excludePatterns,
     maxFilesPerRun: override.maxFilesPerRun ?? base.maxFilesPerRun,
     focusAreas: override.focusAreas ?? base.focusAreas,
-    minConfidenceToBlock:
-      override.minConfidenceToBlock ?? base.minConfidenceToBlock,
-    riskThreshold: override.riskThreshold ?? base.riskThreshold,
     pathRules: override.pathRules ?? base.pathRules,
   };
 }

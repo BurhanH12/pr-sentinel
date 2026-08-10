@@ -19,27 +19,30 @@ export interface GatingResult {
 }
 
 /**
- * Block-worthy when severity, risk, and confidence all meet configured thresholds.
+ * Block-worthy when severity alone meets the configured threshold.
+ *
+ * Confidence and risk used to gate too, but both were self-reported by the
+ * model: an uncalibrated number the model invented for confidence, and an
+ * enum duplicating severity for risk. Gating on invented numbers produced
+ * wrong-but-confident blocks, which the research names as a central cause
+ * of reviewer abandonment. A calibrated substitute (cross-pass agreement)
+ * is a later phase; until then severity is the only signal we trust.
  */
 export function computeShouldFail(
   issues: LineComment[],
   config: ReviewRulesConfig
 ): GatingResult {
   const severityThreshold = SEVERITY_RANK[config.failureThreshold];
-  const riskThreshold = SEVERITY_RANK[config.riskThreshold];
-  const minConfidence = config.minConfidenceToBlock;
 
   let blockEligibleCount = 0;
   let advisoryCount = 0;
 
   for (const issue of issues) {
     const severityOk = SEVERITY_RANK[issue.severity] >= severityThreshold;
-    const riskOk = SEVERITY_RANK[issue.risk] >= riskThreshold;
-    const confidenceOk = issue.confidence >= minConfidence;
 
-    if (severityOk && riskOk && confidenceOk) {
+    if (severityOk) {
       blockEligibleCount += 1;
-    } else if (severityOk) {
+    } else {
       advisoryCount += 1;
     }
   }
