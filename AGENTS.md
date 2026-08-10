@@ -93,7 +93,7 @@ Decisions taken in the current setup pass (see chat history):
 │  5. Run single Cursor agent against local clone (agent/runner.ts)        │
 │  6. Upsert PR summary comment (github/comments.ts)                       │
 │  7. Post inline review comments (github/comments.ts)                     │
-│  8. Update commit status: success | failure                              │
+│  8. Update commit status: success | failure | error (parse failure)      │
 │  9. Always: cleanup the ephemeral checkout                               │
 └──────────────────────────────────────────────────────────────────────────┘
 ```

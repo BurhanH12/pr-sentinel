@@ -115,20 +115,30 @@ export async function updateCommitStatus(
   result: ReviewResult,
   blockOnFailure: boolean
 ): Promise<void> {
-  const state: "success" | "failure" =
-    blockOnFailure && result.shouldFail ? "failure" : "success";
+  /*
+   * A parse failure means the review never produced a real answer - it is
+   * neither a pass nor a finding. Report it as state "error" regardless of
+   * blockOnFailure: that flag governs whether findings block a merge, not
+   * whether the tool may claim success when it errored.
+   */
+  const state: "success" | "failure" | "error" = result.errored
+    ? "error"
+    : blockOnFailure && result.shouldFail
+    ? "failure"
+    : "success";
 
   const issueCount = result.issues.length;
   const blockCount = result.gateSummary?.blockEligibleCount ?? 0;
-  const raw =
-    issueCount === 0
-      ? "No issues found — looks good to merge"
-      : blockCount > 0
-      ? `${blockCount} block-eligible · ${issueCount} total · ${result.verdict.replace(
-          "_",
-          " "
-        )}`
-      : `${issueCount} issue(s) · verdict: ${result.verdict.replace("_", " ")}`;
+  const raw = result.errored
+    ? "Review could not be completed - agent output could not be parsed"
+    : issueCount === 0
+    ? "No issues found — looks good to merge"
+    : blockCount > 0
+    ? `${blockCount} block-eligible · ${issueCount} total · ${result.verdict.replace(
+        "_",
+        " "
+      )}`
+    : `${issueCount} issue(s) · verdict: ${result.verdict.replace("_", " ")}`;
 
   /*
    * GitHub truncates descriptions silently at 140 chars; slice here to be

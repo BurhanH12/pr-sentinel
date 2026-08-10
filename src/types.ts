@@ -191,6 +191,13 @@ export interface ReviewResult {
   issues: LineComment[];
   /** True if `issues` contains anything at or above the configured threshold. */
   shouldFail: boolean;
+  /**
+   * True when the review itself could not be completed (e.g. the model's
+   * output failed to parse) - as opposed to a completed review that found
+   * issues. Distinct from `shouldFail`: `shouldFail` says whether findings
+   * should block a merge, `errored` says the tool never got a real answer.
+   */
+  errored?: boolean;
   /** Set when the PR had more reviewable files than maxFilesPerRun. */
   fileSelection?: ReviewFileSelection;
   gateSummary?: GateSummary;

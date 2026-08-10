@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   parseAgentOutput,
   buildParseFailureResult,
+  neutralisePreviewFences,
 } from "../agent/runner.js";
 
 describe("parseAgentOutput", () => {
@@ -64,5 +65,26 @@ describe("buildParseFailureResult", () => {
     expect(result.verdict).toBe("comment");
     expect(result.summary).toContain(raw.slice(0, 300));
     expect(result.summary).toContain("no_json");
+  });
+});
+
+describe("neutralisePreviewFences", () => {
+  it("breaks a run of exactly three backticks so it can't close a markdown fence", () => {
+    const text = "before ```js\nevil()\n``` after";
+    const result = neutralisePreviewFences(text);
+    expect(result).not.toContain("```");
+    expect(result).toContain("before");
+    expect(result).toContain("after");
+  });
+
+  it("breaks a run of five backticks", () => {
+    const text = "prefix ````` suffix";
+    const result = neutralisePreviewFences(text);
+    expect(result).not.toMatch(/`{3,}/);
+  });
+
+  it("leaves text with no backticks unchanged", () => {
+    const text = "just plain prose, no fences here";
+    expect(neutralisePreviewFences(text)).toBe(text);
   });
 });

@@ -448,7 +448,7 @@ export function buildParseFailureResult(
 ): ReviewResult {
   metrics.increment("agent_output_parse_failures");
 
-  const preview = raw.slice(0, 300);
+  const preview = neutralisePreviewFences(raw.slice(0, 300));
   const summary = [
     `The reviewer could not read the model's response (reason: \`${outcome.reason}\`). The review did not pass - it errored.`,
     outcome.detail,
@@ -464,7 +464,20 @@ export function buildParseFailureResult(
     summary,
     issues: [],
     shouldFail: true,
+    errored: true,
   };
+}
+
+/*
+ * The preview is raw model output - text the model formed after reading
+ * attacker-controlled PR/diff/thread content - embedded inside a
+ * triple-backtick fence in a posted GitHub comment. A run of three or more
+ * backticks anywhere in the preview closes the fence early and lets the
+ * rest of the comment render as live markdown. Break every such run by
+ * inserting a zero-width space inside it, so no run of length >= 3 survives.
+ */
+export function neutralisePreviewFences(text: string): string {
+  return text.replace(/`{3,}/g, (run) => run.split("").join("​"));
 }
 
 // ─── Severity gating ─────────────────────────────────────────────────────────
