@@ -49,6 +49,39 @@ describe("parseAgentOutput", () => {
       expect(outcome.output.issues[0]?.path).toBe("src/a.ts");
     }
   });
+
+  it("parses successfully and truncates to the first 6 when checked has 7 entries", () => {
+    const checked = Array.from({ length: 7 }, (_, i) => `checked item ${i}`);
+    const outcome = parseAgentOutput(
+      JSON.stringify({
+        verdict: "approve",
+        summary: "All good.",
+        checked,
+        issues: [],
+      })
+    );
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) {
+      expect(outcome.output.checked).toHaveLength(6);
+      expect(outcome.output.checked).toEqual(checked.slice(0, 6));
+    }
+  });
+
+  it("leaves a 6-entry checked list untouched", () => {
+    const checked = Array.from({ length: 6 }, (_, i) => `checked item ${i}`);
+    const outcome = parseAgentOutput(
+      JSON.stringify({
+        verdict: "approve",
+        summary: "All good.",
+        checked,
+        issues: [],
+      })
+    );
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) {
+      expect(outcome.output.checked).toEqual(checked);
+    }
+  });
 });
 
 describe("buildParseFailureResult", () => {

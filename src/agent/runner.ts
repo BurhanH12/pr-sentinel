@@ -45,13 +45,14 @@ const lineCommentSchema = z.object({
 export const agentOutputSchema = z.object({
   verdict: z.enum(["approve", "request_changes", "comment"]),
   summary: z.string().min(1),
-  checked: z.array(z.string().min(1)).max(6).default([]),
+  checked: z.array(z.string().min(1)).default([]),
   issues: z.array(lineCommentSchema).default([]),
 });
 
 export type AgentOutput = z.infer<typeof agentOutputSchema>;
 
 const ISSUES_CAP = 10;
+const CHECKED_CAP = 6;
 
 /*
  * Enforce the 10-issue cap post-parse: sort by severity (critical highest),
@@ -78,6 +79,20 @@ export function truncateIssuesToTop(
     issues: ranked.slice(0, cap).map((entry) => entry.issue),
     droppedCount: issues.length - cap,
   };
+}
+
+/*
+ * Same rationale as `truncateIssuesToTop`: `checked` is unbounded at parse
+ * time (the prompt asks for "3 to 6 entries", but a zod `.max()` would fail
+ * `safeParse` for the whole object on a 7-entry overshoot). Enforce the cap
+ * post-parse by keeping the model's first `cap` entries - there is no
+ * severity to rank by here, so no sort is needed, unlike issues.
+ */
+export function truncateCheckedToTop(
+  checked: string[],
+  cap = CHECKED_CAP
+): string[] {
+  return checked.length <= cap ? checked : checked.slice(0, cap);
 }
 
 /*
@@ -486,7 +501,9 @@ export function parseAgentOutput(raw: string): ParseOutcome {
     metrics.increment("agent_issues_overshoot_dropped", droppedCount);
   }
 
-  return { ok: true, output: { ...parsed.data, issues } };
+  const checked = truncateCheckedToTop(parsed.data.checked);
+
+  return { ok: true, output: { ...parsed.data, issues, checked } };
 }
 
 /*
