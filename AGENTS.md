@@ -120,11 +120,10 @@ agent-orchestrator/
 │   └── review-rules.example.json          ← schema template for per-repo overrides
 │
 ├── skills/                                ← review skill files (copy from user-level ~/.agents/skills etc.)
-│   ├── README.md                          ← explains the five skills and how to sync them
+│   ├── README.md                          ← explains the skills and how to sync them
 │   ├── code-review-and-quality/           ← five-axis review: correctness, readability, arch, security, perf
 │   ├── nestjs-best-practices/             ← NestJS review guidance (arch, DI, security, perf, DB, API, etc.)
 │   ├── security-best-practices/           ← security review + vulnerability report skill
-│   ├── next-best-practices/               ← Next.js 15+ (RSC, async params, file conventions, etc.)
 │   └── vercel-react-best-practices/       ← React/Next.js perf review guidance (waterfalls, bundle, re-renders)
 │
 └── src/

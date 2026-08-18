@@ -11,7 +11,6 @@ Each skill is maintained independently and covers a focused domain:
 | `code-review-and-quality/`     | Five-axis review: correctness, readability, architecture, security, performance. Change sizing and review process.                        |
 | `nestjs-best-practices/`       | NestJS review guidance in `SKILL.md`: architecture, DI, error handling, security, performance, testing, database, API design, microservices, and DevOps. The detailed per-topic rule files referenced by earlier versions of this skill have been removed. |
 | `security-best-practices/`     | Language and framework-specific security guidance. Generates prioritised vulnerability reports.                                           |
-| `next-best-practices/`         | Next.js 15+ patterns: RSC boundaries, async API changes, file conventions, runtime selection, hydration errors.                           |
 | `vercel-react-best-practices/` | React/Next.js performance guidance in `SKILL.md`: waterfall elimination, bundle size, SSR, re-render optimisation, JS perf. The detailed per-topic rule files referenced by earlier versions of this skill have been removed. |
 
 ## Keeping rules in sync
@@ -30,6 +29,5 @@ Copy or symlink them here so they travel with the repo:
 cp ~/.claude/skills/code-review-and-quality/SKILL.md    skills/code-review-and-quality/
 cp ~/.claude/skills/nestjs-best-practices/SKILL.md       skills/nestjs-best-practices/
 cp ~/.claude/skills/security-best-practices/SKILL.md     skills/security-best-practices/
-cp ~/.agents/skills/next-best-practices/SKILL.md         skills/next-best-practices/
 cp ~/.agents/skills/vercel-react-best-practices/SKILL.md skills/vercel-react-best-practices/
 ```

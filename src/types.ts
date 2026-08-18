@@ -183,7 +183,6 @@ export type ReviewSkillRef =
   | "code-review-and-quality"
   | "nestjs-best-practices"
   | "security-best-practices"
-  | "next-best-practices"
   | "vercel-react-best-practices";
 
 export interface ReviewResult {

@@ -17,7 +17,7 @@ const SKILL_CHAR_LIMIT = 3_000;
 
 const STACK_SKILLS: Record<ReviewStack, ReviewSkillRef[]> = {
   nestjs: ["nestjs-best-practices"],
-  nextjs: ["next-best-practices"],
+  nextjs: ["vercel-react-best-practices"],
   react: ["vercel-react-best-practices"],
 };
 

@@ -14,7 +14,6 @@ const reviewSkillRefSchema = z.enum([
   "code-review-and-quality",
   "nestjs-best-practices",
   "security-best-practices",
-  "next-best-practices",
   "vercel-react-best-practices",
 ]);
 
@@ -119,7 +118,7 @@ const ORG_DEFAULTS: ReviewRulesConfig = {
     {
       patterns: ["apps/web/**", "web/**", "app/**", "pages/**"],
       focusAreas: ["correctness", "performance", "consistency"],
-      skillRefs: ["next-best-practices", "vercel-react-best-practices"],
+      skillRefs: ["vercel-react-best-practices"],
       rules:
         "Frontend changes must respect Server/Client Component boundaries, avoid render waterfalls, and reuse established UI/data-fetching patterns.",
     },
