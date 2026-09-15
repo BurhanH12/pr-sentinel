@@ -323,6 +323,35 @@ Runtime directories (gitignored): `.tmp-clones/` (ephemeral PR checkouts),
 
 ---
 
+## Evaluating the reviewer
+
+`src/eval/` measures whether the reviewer actually catches known bugs, and how much noise it emits alongside them.
+It answers one question: when a real bug sits at a known line, does the reviewer put a comment there.
+
+Ground truth comes from two tiers, and neither needs a human to label anything.
+Tier 1 mines git history: a commit whose subject reads like a fix points back at the commit that introduced the bug, so the introducing commit becomes the case and the lines the fix touched become the expected findings.
+Tier 2 injects synthetic bugs: it takes a known-good commit, applies one small mechanical mutation (an inverted boundary, a dropped null check, swapped call arguments, a removed `await`), and records exactly which line it broke.
+
+Run the three commands in this order:
+
+```
+pnpm eval mine --repo . --out .eval/cases.json
+pnpm eval inject --repo . --work-dir .eval/inject-work --out .eval/cases.json
+pnpm eval run --cases .eval/cases.json --run-twice --yes
+```
+
+`mine` and `inject` are free; they only read git history and write case files.
+`run` is the only subcommand that spends money, because it invokes the reviewer for real.
+It prints the case count and the worst-case cost before doing anything, and refuses to proceed without an interactive `y` confirmation or the `--yes` flag (which is what CI uses).
+
+The report lands at `.eval/report.json` (the raw `ScoreReport`) and `.eval/report.md` (the rendered summary), unless `--out` points somewhere else.
+Both are gitignored; regenerate them locally or in CI rather than committing them.
+
+The report is judged against the budgets in IMPROVEMENT-PLAN §2.5 and §2.6: a $0.10 median cost per review, a $0.50 hard cap, and a 10-issue cap per review.
+`--run-twice` also measures the §2.11 stability floor: the same case run twice should agree on at least 80% of its findings by Jaccard overlap, or the report flags it.
+
+---
+
 ## Troubleshooting
 
 - **`Invalid environment variables`** on boot → fields named in the error

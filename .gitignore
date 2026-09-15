@@ -27,5 +27,8 @@ dist/
 coverage/
 *.tsbuildinfo
 
+# Eval artefacts: mined/injected cases and generated reports (pnpm eval)
+.eval/
+
 # SDD workspace (ledger, briefs, review packages) - local only
 .superpowers/
