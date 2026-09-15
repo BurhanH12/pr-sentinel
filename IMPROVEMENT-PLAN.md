@@ -649,9 +649,21 @@ After `pnpm build`, `pnpm test` reports 90 tests instead of 45, because the comp
 This silently doubles every count and would mask a deleted test.
 The fix is an exclude in the vitest config, and it belongs with Phase 1 item 7 since the eval work depends on trustworthy test counts.
 
-### Phase 1 - trust, and the two gates
+### Phase 1 - trust, and the two gates - COMPLETE (2026-09-15)
 
 Nothing further gets built until the eval exists and duplicate detection proves itself.
+
+Shipped on branch `phase-1-trust-and-gates`.
+Verification after the phase: `pnpm typecheck` clean, `pnpm test` 155/155, `pnpm build` clean.
+
+Item 9, the duplicate-detection precision gate, is deferred to the start of Phase 2 rather than
+pre-run here - it needs a duplicate-detection prototype (Phase 2 item 14) and a human hand-count
+over 20 merged PRs, neither of which can happen before that prototype exists.
+It stays a gate on Phase 2's start, not a completed Phase 1 item.
+
+The carried Phase 0 finding on `skills/next-best-practices/SKILL.md` was resolved by deletion
+rather than by rewriting it with real content: the file had no rules behind its directive after
+the Phase 0 prune, and Next.js coverage already lives in `vercel-react-best-practices`.
 
 1. **Dedup inline comments** against existing bot comments (§3.2). ~20 lines. Highest-value change in the document.
 2. **Stop displaying self-reported confidence; cap issues at 10** (§3.7, §2.6). Cheapest change available, targets the top two abandonment causes.
