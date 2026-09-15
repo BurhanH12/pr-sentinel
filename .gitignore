@@ -26,3 +26,6 @@ dist/
 # Test / tooling artifacts
 coverage/
 *.tsbuildinfo
+
+# SDD workspace (ledger, briefs, review packages) - local only
+.superpowers/

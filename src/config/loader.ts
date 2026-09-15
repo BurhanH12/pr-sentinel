@@ -81,7 +81,7 @@ export const reviewRulesConfigSchema: z.ZodType<Partial<ReviewRulesConfig>> =
  * Each layer is independent — a layer being missing is normal and never an error.
  */
 
-const ORG_DEFAULTS: ReviewRulesConfig = {
+export const ORG_DEFAULTS: ReviewRulesConfig = {
   rules: "",
   blockOnFailure: false,
   failureThreshold: "high",
