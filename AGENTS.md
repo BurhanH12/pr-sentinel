@@ -137,6 +137,7 @@ agent-orchestrator/
     │   ├── runner.ts                      ← builds the review prompt, invokes the agent, parses/gates the JSON result
     │   ├── cursor-invoke.ts               ← @cursor/sdk Agent.prompt wrapper with retry on retryable CursorAgentError
     │   ├── exemplars.ts                   ← sibling-exemplar prompt section: existing same-role files for newly added files
+    │   ├── rule-routing.ts                ← filterRulesByStacks: drops stack-tagged rule blocks for undetected stacks (fails open)
     │   ├── gating.ts                      ← severity-only merge-gate computation (computeShouldFail)
     │   └── runtime-knowledge.ts           ← detects target repo stack + injects AGENTS.md/CONTEXT.md and skill files
     │
@@ -230,6 +231,10 @@ Resolved per PR by `src/config/loader.ts`. Later layers win, per-field:
    `failureThreshold: "high"`, `pathRules`, exclude globs for lockfiles / dist / etc.).
 2. **`cursor-config/review-rules.md`** — bundled with the orchestrator; only
    overrides the `rules` field. Focused on NestJS and Next.js projects.
+   Stack-specific blocks are wrapped in `<!-- stack: nestjs -->` ...
+   `<!-- /stack -->` markers (values `nestjs | nextjs | react`) and dropped
+   by `src/agent/rule-routing.ts` when the stack is not detected; untagged
+   text is universal.
    This markdown file and the skill files under `skills/` are injected into
    the same review prompt - the file does not replace the skills, both are
    sent to the model together.

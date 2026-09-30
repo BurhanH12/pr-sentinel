@@ -3,7 +3,11 @@ import { z } from "zod";
 import { computeShouldFail, SEVERITY_RANK } from "./gating.js";
 import { promptAgentWithRetry } from "./cursor-invoke.js";
 import { buildExemplarSection } from "./exemplars.js";
-import { buildRuntimeKnowledgeSection } from "./runtime-knowledge.js";
+import {
+  buildRuntimeKnowledgeSection,
+  detectStacks,
+} from "./runtime-knowledge.js";
+import { filterRulesByStacks } from "./rule-routing.js";
 import { resolveMatchingPathRules } from "../config/loader.js";
 import type {
   ClassifiedThread,
@@ -118,11 +122,24 @@ export async function runPRReview(
   });
 
   const changedPaths = fileSelection.files.map((f) => f.filename);
-  const matchingPathRules = resolveMatchingPathRules(config, changedPaths);
+  const stacks = await detectStacks(cwd, changedPaths);
+  const routedConfig: ReviewRulesConfig = {
+    ...config,
+    rules: filterRulesByStacks(config.rules, stacks),
+  };
+  const matchingPathRules = resolveMatchingPathRules(
+    routedConfig,
+    changedPaths
+  ).map((pack) =>
+    pack.rules
+      ? { ...pack, rules: filterRulesByStacks(pack.rules, stacks) }
+      : pack
+  );
   const runtimeKnowledgeSection = await buildRuntimeKnowledgeSection(
     cwd,
     changedPaths,
-    matchingPathRules
+    matchingPathRules,
+    stacks
   );
   const exemplarSection = await buildExemplarSection(
     cwd,
@@ -133,7 +150,7 @@ export async function runPRReview(
   const prompt = buildReviewPrompt(
     pr,
     diff,
-    config,
+    routedConfig,
     threadContext,
     matchingPathRules,
     requirementSection,

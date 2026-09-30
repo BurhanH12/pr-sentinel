@@ -53,7 +53,8 @@ describe("buildRuntimeKnowledgeSection", () => {
     const section = await buildRuntimeKnowledgeSection(
       cwd,
       ["apps/api/src/users.controller.ts"],
-      matchedPathRules
+      matchedPathRules,
+      ["nestjs"]
     );
 
     expect(section).toContain("## Runtime project knowledge");

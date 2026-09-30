@@ -112,6 +112,7 @@ These are the most important checks because they are specific to this codebase.
 - Flag insecure cookie flags (`httpOnly`, `sameSite`, `secure`).
 - Flag auto-incrementing integer IDs in public URLs — prefer UUID v4.
 
+<!-- stack: nestjs -->
 ### NestJS-specific
 
 - Flag controllers or resolvers missing `@UseGuards()` where the route is not
@@ -120,12 +121,15 @@ These are the most important checks because they are specific to this codebase.
 - Flag JWT secrets in code instead of `ConfigService` / env.
 - Flag missing rate limiting (`@nestjs/throttler`) on auth endpoints.
 - Flag GraphQL resolvers missing object-level authorisation before querying.
+<!-- /stack -->
 
+<!-- stack: nextjs -->
 ### Next.js-specific
 
 - Flag Server Actions that do not verify the caller's session before mutating.
 - Flag Route Handlers that read body or query params without boundary validation.
 - Flag `dangerouslySetInnerHTML` with unsanitized input.
+<!-- /stack -->
 
 ---
 
@@ -139,6 +143,7 @@ These are the most important checks because they are specific to this codebase.
 - Flag CPU-intensive work in hot paths that should run in a worker or be
   offloaded.
 
+<!-- stack: nestjs -->
 ### NestJS-specific
 
 - Flag async lifecycle hooks (`onModuleInit`, `onApplicationBootstrap`) missing
@@ -146,7 +151,9 @@ These are the most important checks because they are specific to this codebase.
 - Flag missing caching on expensive read-only endpoints.
 - Flag `findMany`/`findAll` without `select`/`include` — fetching unused columns.
 - Flag heavy modules that could be lazy-loaded.
+<!-- /stack -->
 
+<!-- stack: nextjs,react -->
 ### Next.js / React
 
 - Flag sequential `await` calls for independent operations — use `Promise.all()`.
@@ -156,11 +163,13 @@ These are the most important checks because they are specific to this codebase.
 - Flag `useEffect` that re-fetches due to non-primitive dependency arrays.
 - Flag inline component definitions inside another component's render body.
 - Flag `&&` conditional JSX where the left-hand side can be `0`.
+<!-- /stack -->
 
 ---
 
 ## 6. Architecture
 
+<!-- stack: nestjs -->
 ### NestJS
 
 - Flag circular module dependencies.
@@ -170,7 +179,9 @@ These are the most important checks because they are specific to this codebase.
 - Flag `new SomeService()` instead of DI.
 - Flag mutable module-level state in singleton services.
 - Flag multi-table write operations missing a database transaction.
+<!-- /stack -->
 
+<!-- stack: nextjs -->
 ### Next.js
 
 - Flag `async function` on a `'use client'` component.
@@ -182,6 +193,7 @@ These are the most important checks because they are specific to this codebase.
   (async in Next.js 15+).
 - Flag `cookies()` / `headers()` not awaited.
 - Flag Route Handler `GET` defined in the same file as `page.tsx`.
+<!-- /stack -->
 
 ---
 

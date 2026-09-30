@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import type { PathRulePack, ReviewSkillRef } from "../types.js";
 
-type ReviewStack = "nestjs" | "nextjs" | "react";
+export type ReviewStack = "nestjs" | "nextjs" | "react";
 
 interface PackageManifest {
   dependencies?: Record<string, string>;
@@ -61,15 +61,26 @@ export function detectReviewStacks(
 }
 
 /**
+ * Reads the target repo's package.json and detects its stacks once, so the
+ * prompt builder and rule routing share one result.
+ */
+export async function detectStacks(
+  cwd: string,
+  changedPaths: string[]
+): Promise<ReviewStack[]> {
+  const manifest = await readJsonFile(join(cwd, "package.json"));
+  return detectReviewStacks(manifest, changedPaths);
+}
+
+/**
  * Builds the prompt section containing repo-local guidance and relevant skills.
  */
 export async function buildRuntimeKnowledgeSection(
   cwd: string,
   changedPaths: string[],
-  matchingPathRules: PathRulePack[]
+  matchingPathRules: PathRulePack[],
+  stacks: ReviewStack[]
 ): Promise<string> {
-  const manifest = await readJsonFile(join(cwd, "package.json"));
-  const stacks = detectReviewStacks(manifest, changedPaths);
   const skillRefs = resolveSkillRefs(stacks, matchingPathRules, changedPaths);
   const targetContext = await readTargetContext(cwd);
   const skillSections = await readSkillSections(skillRefs);
