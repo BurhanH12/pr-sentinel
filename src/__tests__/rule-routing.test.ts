@@ -47,6 +47,8 @@ describe("filterRulesByStacks", () => {
     ["nested", "<!-- stack: nestjs -->\n<!-- stack: react -->\nX\n<!-- /stack -->"],
     ["unknown stack", "<!-- stack: vue -->\nX\n<!-- /stack -->"],
     ["malformed open", "<!-- stack nestjs -->\nX\n<!-- /stack -->"],
+    ["malformed open, no close", "<!-- stack nestjs -->\nX"],
+    ["malformed close", "<!-- stack: nestjs -->\nX\n<!-- /stack nope -->"],
   ])("fails open on %s markers", (_name, text) => {
     expect(filterRulesByStacks(text, ["react"])).toBe(text);
   });
@@ -73,7 +75,9 @@ describe("filterRulesByStacks", () => {
     });
     expect(prompt).toContain("@UseGuards()");
     expect(prompt).not.toContain("barrel-file imports");
-    expect(prompt).not.toContain("dangerouslySetInnerHTML");
+    expect(filterRulesByStacks(rules, ["react"])).toContain(
+      "dangerouslySetInnerHTML"
+    );
     expect(prompt).not.toContain("<!-- stack");
   });
 });

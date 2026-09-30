@@ -22,7 +22,7 @@ export function filterRulesByStacks(
 
   for (const line of rules.split("\n")) {
     const trimmed = line.trim();
-    const isMarker = trimmed.startsWith("<!--") && /stack/.test(trimmed);
+    const isMarker = /^<!--\s*\/?stack\b/.test(trimmed);
 
     if (!isMarker) {
       if (!skipping) out.push(line);
@@ -30,6 +30,12 @@ export function filterRulesByStacks(
     }
 
     const opened = OPEN_MARKER.exec(trimmed);
+    /*
+     * Any stack-marker-looking line must match one of the two regexes;
+     * a near-miss (typo, missing colon) fails open rather than leaking into
+     * the prompt or hiding a block boundary. Unrelated comments that merely
+     * contain the word "stack" pass through.
+     */
     if (opened?.[1] !== undefined) {
       const tagged = opened[1].split(",").map((s) => s.trim());
       if (open || !tagged.every((s) => KNOWN_STACKS.includes(s))) return rules;
@@ -39,10 +45,8 @@ export function filterRulesByStacks(
       if (!open) return rules;
       open = false;
       skipping = false;
-    }
-    // Comments that merely mention "stack" but are not markers pass through.
-    else if (!skipping) {
-      out.push(line);
+    } else {
+      return rules;
     }
   }
 

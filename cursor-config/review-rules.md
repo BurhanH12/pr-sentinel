@@ -123,7 +123,7 @@ These are the most important checks because they are specific to this codebase.
 - Flag GraphQL resolvers missing object-level authorisation before querying.
 <!-- /stack -->
 
-<!-- stack: nextjs -->
+<!-- stack: nextjs,react -->
 ### Next.js-specific
 
 - Flag Server Actions that do not verify the caller's session before mutating.
@@ -142,6 +142,7 @@ These are the most important checks because they are specific to this codebase.
 - Flag synchronous file I/O (`readFileSync`, `writeFileSync`) in handlers.
 - Flag CPU-intensive work in hot paths that should run in a worker or be
   offloaded.
+- Flag sequential `await` calls for independent operations — use `Promise.all()`.
 
 <!-- stack: nestjs -->
 ### NestJS-specific
@@ -156,7 +157,6 @@ These are the most important checks because they are specific to this codebase.
 <!-- stack: nextjs,react -->
 ### Next.js / React
 
-- Flag sequential `await` calls for independent operations — use `Promise.all()`.
 - Flag barrel-file imports (`import { X } from '@/components'`).
 - Flag heavy components not wrapped in `next/dynamic` when not needed on first
   paint.
