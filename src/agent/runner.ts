@@ -225,7 +225,7 @@ export async function runPRReview(
 
 // ─── Prompt builder ──────────────────────────────────────────────────────────
 
-function buildReviewPrompt(
+export function buildReviewPrompt(
   pr: PullRequestContext,
   diff: string,
   config: ReviewRulesConfig,
@@ -242,18 +242,19 @@ function buildReviewPrompt(
   const threadContextSection = buildThreadContextSection(threadContext);
   const pathRulesSection = buildPathRulesSection(matchingPathRules);
 
-  return `You are a senior staff engineer doing a thorough pull request review.
+  /*
+   * Cursor prompt caching is prefix-based. Everything above the "PR under
+   * review" heading depends only on repo config and the changed-path set, so
+   * it is byte-identical across PRs and cacheable. Anything PR-specific
+   * (identity, requirements, threads, diff) must stay in the tail. New
+   * optional volatile sections go in the tail array, after PR identity and
+   * before requirements.
+   */
+  const stablePrefix = `You are a senior staff engineer doing a thorough pull request review.
 
-You are reviewing PR #${pr.prNumber} in \`${
-    pr.repoFullName
-  }\` against base branch \`${pr.baseBranch}\`.
-The base branch represents the current project architecture — your job is to make sure the PR is
+The base branch represents the current project architecture - your job is to make sure the PR is
 consistent with it and follows the rules below.
 
-**PR title:** ${pr.prTitle}
-**Author:** ${pr.authorLogin}
-${pr.prBody ? `**Description:**\n${pr.prBody}\n` : ""}
-${requirementSection}
 ## Focus areas
 
 Cover all of these in a single combined review:
@@ -262,11 +263,7 @@ ${focusList}
 ## Project review rules
 
 ${config.rules}
-${pathRulesSection}${runtimeKnowledgeSection}${threadContextSection}
-## Changed files (unified diff)
-
-${diff}
-
+${pathRulesSection}${runtimeKnowledgeSection}
 ---
 
 ## Your task
@@ -305,6 +302,26 @@ Output rules:
 - Maximum 10 issues total. If you find more, report only the 10 highest-severity ones - a review that reports twenty speculative findings around one real one has failed.
 - Keep "body" actionable — name the fix, don't just describe the smell.
 `;
+
+  const prIdentity = `## PR under review
+
+You are reviewing PR #${pr.prNumber} in \`${
+    pr.repoFullName
+  }\` against base branch \`${pr.baseBranch}\`.
+
+**PR title:** ${pr.prTitle}
+**Author:** ${pr.authorLogin}
+${pr.prBody ? `**Description:**\n${pr.prBody}\n` : ""}`;
+
+  const tail = [
+    prIdentity,
+    requirementSection,
+    threadContextSection,
+    `## Changed files (unified diff)\n\n${diff}`,
+    "Reminder: reply with ONLY the JSON object described above.",
+  ];
+
+  return `${stablePrefix}\n${tail.join("\n")}\n`;
 }
 
 function resolveEffectiveFocusAreas(
