@@ -136,6 +136,7 @@ agent-orchestrator/
     ├── agent/
     │   ├── runner.ts                      ← builds the review prompt, invokes the agent, parses/gates the JSON result
     │   ├── cursor-invoke.ts               ← @cursor/sdk Agent.prompt wrapper with retry on retryable CursorAgentError
+    │   ├── exemplars.ts                   ← sibling-exemplar prompt section: existing same-role files for newly added files
     │   ├── gating.ts                      ← severity-only merge-gate computation (computeShouldFail)
     │   └── runtime-knowledge.ts           ← detects target repo stack + injects AGENTS.md/CONTEXT.md and skill files
     │

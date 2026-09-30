@@ -2,6 +2,7 @@ import { CursorAgentError } from "@cursor/sdk";
 import { z } from "zod";
 import { computeShouldFail, SEVERITY_RANK } from "./gating.js";
 import { promptAgentWithRetry } from "./cursor-invoke.js";
+import { buildExemplarSection } from "./exemplars.js";
 import { buildRuntimeKnowledgeSection } from "./runtime-knowledge.js";
 import { resolveMatchingPathRules } from "../config/loader.js";
 import type {
@@ -123,6 +124,7 @@ export async function runPRReview(
     changedPaths,
     matchingPathRules
   );
+  const exemplarSection = await buildExemplarSection(cwd, fileSelection.files);
   const diff = formatDiffForPrompt(fileSelection.files);
   const prompt = buildReviewPrompt(
     pr,
@@ -131,7 +133,8 @@ export async function runPRReview(
     threadContext,
     matchingPathRules,
     requirementSection,
-    runtimeKnowledgeSection
+    runtimeKnowledgeSection,
+    exemplarSection
   );
 
   log.info({ files: fileSelection.files.length }, "Invoking Cursor agent");
@@ -232,7 +235,8 @@ export function buildReviewPrompt(
   threadContext?: ThreadContextBundle,
   matchingPathRules: ReviewRulesConfig["pathRules"] = [],
   requirementSection = "",
-  runtimeKnowledgeSection = ""
+  runtimeKnowledgeSection = "",
+  exemplarSection = ""
 ): string {
   const focusAreas = resolveEffectiveFocusAreas(config, matchingPathRules);
   const focusList = focusAreas
@@ -315,6 +319,7 @@ ${pr.prBody ? `**Description:**\n${pr.prBody}\n` : ""}`;
 
   const tail = [
     prIdentity,
+    exemplarSection,
     requirementSection,
     threadContextSection,
     `## Changed files (unified diff)\n\n${diff}`,
