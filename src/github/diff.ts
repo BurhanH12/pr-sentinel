@@ -103,7 +103,8 @@ export function selectReviewFiles(
       .slice(0, MAX_OMITTED_PATHS_IN_SUMMARY);
     return {
       files,
-      totalFiles: all.length,
+      allChangedPaths: all.map((f) => f.filename),
+    totalFiles: all.length,
       excludedCount,
       truncatedCount: filtered.length - maxFiles,
       omittedFiles,
@@ -113,6 +114,7 @@ export function selectReviewFiles(
 
   return {
     files: filtered,
+    allChangedPaths: all.map((f) => f.filename),
     totalFiles: all.length,
     excludedCount,
     truncatedCount: 0,

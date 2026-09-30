@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { buildExemplarSection } from "../agent/exemplars.js";
@@ -90,15 +90,48 @@ describe("buildExemplarSection", () => {
     }
     const one = await buildExemplarSection(root, [added("src/new.controller.ts")]);
     expect(one).toContain("...[truncated]");
-    expect(one.length).toBeLessThan(2_500 * 3 + 1_000);
+    const fences = [...one.matchAll(/```\n([\s\S]*?)\n```/g)];
+    expect(fences).toHaveLength(3);
+    for (const f of fences) expect(f[1]!.length).toBeLessThanOrEqual(2_500);
 
     const all = await buildExemplarSection(root, [
       added("src/n.controller.ts"),
       added("src/n.service.ts"),
       added("src/n.dto.ts"),
     ]);
-    expect(all.length).toBeLessThanOrEqual(12_001);
-    expect(all.endsWith("...[truncated]\n")).toBe(true);
+    expect(all.length).toBeLessThanOrEqual(12_000);
+    expect(all.endsWith("...[truncated]")).toBe(true);
+    expect((all.match(/```/g) ?? []).length % 2).toBe(0);
+  });
+
+  it("skips symlinks, all ignored dirs, and non-role suffixes", async () => {
+    for (const d of ["build", ".git", "coverage", ".next"]) {
+      await put(`${d}/x.controller.ts`);
+    }
+    await put("elsewhere/real.controller.ts");
+    await mkdir(join(root, "src"), { recursive: true });
+    await symlink(join(root, "elsewhere/real.controller.ts"), join(root, "src/link.controller.ts"));
+    await put("src/a.test.ts");
+    await put("src/types.d.ts");
+    const out = await buildExemplarSection(root, [
+      added("src/new.controller.ts"),
+      added("src/new.test.ts"),
+      added("src/new.d.ts"),
+    ]);
+    const paths = [...out.matchAll(/Exemplar: `([^`]+)`/g)].map((m) => m[1]);
+    expect(paths).toEqual(["elsewhere/real.controller.ts"]);
+  });
+
+  it("excludes PR paths dropped from the reviewed subset", async () => {
+    await put("src/cut.controller.ts");
+    await put("src/keep.controller.ts");
+    const out = await buildExemplarSection(
+      root,
+      [added("src/new.controller.ts")],
+      ["src/new.controller.ts", "src/cut.controller.ts"]
+    );
+    const paths = [...out.matchAll(/Exemplar: `([^`]+)`/g)].map((m) => m[1]);
+    expect(paths).toEqual(["src/keep.controller.ts"]);
   });
 
   it("limits exemplars to the first 3 new files", async () => {

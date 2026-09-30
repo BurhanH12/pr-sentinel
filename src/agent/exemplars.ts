@@ -17,6 +17,14 @@ const IGNORED_DIRS = new Set([
   ".next",
 ]);
 const ROLE_SUFFIX = /^.+(\.[a-z0-9-]+\.[a-z0-9]+)$/i;
+const NON_ROLES = new Set(["test", "spec", "d"]);
+const MAX_WALK_ENTRIES = 20_000;
+
+function roleSuffix(name: string): string | undefined {
+  const suffix = ROLE_SUFFIX.exec(name)?.[1]?.toLowerCase();
+  if (!suffix) return undefined;
+  return NON_ROLES.has(suffix.split(".")[1] ?? "") ? undefined : suffix;
+}
 const TRUNCATION_MARKER = "\n...[truncated]";
 
 function truncate(text: string, limit: number): string {
@@ -46,20 +54,28 @@ async function listCandidates(
   root: string,
   dir: string,
   suffixes: Set<string>,
-  out: Map<string, string[]>
+  out: Map<string, string[]>,
+  budget: { left: number }
 ): Promise<void> {
-  const entries = await readdir(join(root, dir), { withFileTypes: true });
+  let entries;
+  try {
+    entries = await readdir(join(root, dir), { withFileTypes: true });
+  } catch (err) {
+    logger.warn({ err, dir }, "Exemplar walk skipped unreadable directory");
+    return;
+  }
   for (const entry of entries) {
+    if (budget.left-- <= 0) return;
     const rel = dir === "" ? entry.name : `${dir}/${entry.name}`;
     if (entry.isDirectory()) {
       if (!IGNORED_DIRS.has(entry.name)) {
-        await listCandidates(root, rel, suffixes, out);
+        await listCandidates(root, rel, suffixes, out, budget);
       }
       continue;
     }
     // Symlinks are skipped: the checkout is untrusted and a link could point outside it.
     if (!entry.isFile()) continue;
-    const suffix = ROLE_SUFFIX.exec(entry.name)?.[1]?.toLowerCase();
+    const suffix = roleSuffix(entry.name);
     if (suffix && suffixes.has(suffix)) {
       out.get(suffix)?.push(rel);
     }
@@ -73,15 +89,20 @@ async function listCandidates(
  */
 export async function buildExemplarSection(
   cwd: string,
-  files: PullRequestFile[]
+  files: PullRequestFile[],
+  allChangedPaths: string[] = []
 ): Promise<string> {
   try {
-    const prPaths = new Set(files.map((f) => f.filename));
+    /*
+     * Files dropped by exclude globs or the maxFilesPerRun cap are still the
+     * PR's own code on disk, so they must not be offered as existing siblings.
+     */
+    const prPaths = new Set([...files.map((f) => f.filename), ...allChangedPaths]);
     const newFiles = files
       .filter((f) => f.status === "added")
       .map((f) => ({
         path: f.filename,
-        suffix: ROLE_SUFFIX.exec(basename(f.filename))?.[1]?.toLowerCase(),
+        suffix: roleSuffix(basename(f.filename)),
       }))
       .filter((f): f is { path: string; suffix: string } => !!f.suffix)
       .sort((a, b) => a.path.localeCompare(b.path))
@@ -90,7 +111,9 @@ export async function buildExemplarSection(
 
     const candidates = new Map<string, string[]>();
     for (const { suffix } of newFiles) candidates.set(suffix, []);
-    await listCandidates(cwd, "", new Set(candidates.keys()), candidates);
+    await listCandidates(cwd, "", new Set(candidates.keys()), candidates, {
+      left: MAX_WALK_ENTRIES,
+    });
 
     const blocks: string[] = [];
     for (const { path, suffix } of newFiles) {
@@ -122,7 +145,23 @@ export async function buildExemplarSection(
       "These are existing files of the same kind as the newly added files named below. " +
       "Judge whether each new file follows the same structure, naming, error handling, and dependency patterns. " +
       "Flag only concrete, verifiable deviations and cite the exemplar path.\n\n";
-    return `${truncate(header + blocks.join("\n\n"), SECTION_CHAR_LIMIT)}\n`;
+    /*
+     * Drop whole trailing blocks rather than slicing mid-block, so a code
+     * fence is never left unclosed. The marker reserves its own space.
+     */
+    let body = header + blocks.join("\n\n");
+    if (body.length > SECTION_CHAR_LIMIT) {
+      const kept: string[] = [];
+      let len = header.length + TRUNCATION_MARKER.length;
+      for (const b of blocks) {
+        len += b.length + 2;
+        if (len > SECTION_CHAR_LIMIT) break;
+        kept.push(b);
+      }
+      if (kept.length === 0) return "";
+      body = header + kept.join("\n\n") + TRUNCATION_MARKER;
+    }
+    return body;
   } catch (err) {
     logger.warn({ err }, "Exemplar section failed; continuing without it");
     return "";

@@ -110,6 +110,8 @@ export interface ReviewFileSelection {
   truncatedCount: number;
   /** Sample of omitted paths (capped for summary display). */
   omittedFiles: string[];
+  /** Every path the PR changed, before exclude globs and the file cap. */
+  allChangedPaths?: string[];
   maxFiles: number;
 }
 

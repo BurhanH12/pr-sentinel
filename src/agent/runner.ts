@@ -124,7 +124,11 @@ export async function runPRReview(
     changedPaths,
     matchingPathRules
   );
-  const exemplarSection = await buildExemplarSection(cwd, fileSelection.files);
+  const exemplarSection = await buildExemplarSection(
+    cwd,
+    fileSelection.files,
+    fileSelection.allChangedPaths
+  );
   const diff = formatDiffForPrompt(fileSelection.files);
   const prompt = buildReviewPrompt(
     pr,
