@@ -41,6 +41,7 @@ orchestratePRReview(pr)
     │
     ▼
 @cursor/sdk Agent.prompt({ local: { cwd } })  + severity gating
+    │   (prompt: static prefix first, then PR meta, diff, sibling exemplars)
     │
     ▼
 GitHub
@@ -265,6 +266,28 @@ orchestrator additionally pulls per-target-repo overrides from:
 at ref `CONFIG_REPO_REF` (default `main`). Useful for org admins who don't
 want to touch every reviewed repo.
 
+### Stack-scoped rules
+
+The bundled `cursor-config/review-rules.md` wraps stack-specific blocks in `<!-- stack: nestjs -->` ... `<!-- /stack -->` markers.
+Accepted values are `nestjs`, `nextjs` and `react`, comma-separated for shared blocks.
+The orchestrator detects the target repo's stack and drops tagged blocks for stacks it did not find, so a backend PR never sees React rules.
+Untagged text is universal.
+Routing fails open: a malformed marker, or no detected stack, leaves the rules unchanged.
+
+---
+
+## Review prompt
+
+The prompt is ordered static-first (rules, skills, output schema), then volatile content (PR metadata, diff).
+This keeps a byte-identical prefix across PRs so provider prompt caching can hit.
+The cache hit rate and per-review cost are recorded in `GET /metrics` and shown in the summary comment footer.
+
+### Sibling exemplars
+
+When a PR adds a file with a role suffix such as `*.controller.ts` or `*.service.ts`, the prompt includes up to 3 existing files of the same role from the checkout, nearest directory first.
+The reviewer uses them as the reference for local conventions, so new code is checked against how this repo already does the same job.
+Exemplars are size-capped and exclude every file the PR touches and test files.
+
 ---
 
 ## Watched branches
@@ -301,11 +324,12 @@ See [`AGENTS.md`](./AGENTS.md) for conventions and SDK notes. Layout:
 ```
 agent-orchestrator/
 ├── src/
+│   ├── eval/                   bug-detection eval harness (mine, inject, score, report)
 │   ├── index.ts              HTTP entry (signals, mirror eviction, listen)
 │   ├── server.ts             Express + webhook routing + fork guard
 │   ├── orchestrator.ts       per-PR pipeline
 │   ├── env.ts / types.ts     zod env + shared types
-│   ├── agent/                  Cursor SDK invoke, gating, JSON validation
+│   ├── agent/                  Cursor SDK invoke, prompt build, exemplars, rule routing, gating, JSON validation
 │   ├── config/loader.ts      layered review rules
 │   ├── context/                optional requirements / issue context
 │   ├── github/                 PAT auth, clone, mirror cache, diff, comments, statuses
